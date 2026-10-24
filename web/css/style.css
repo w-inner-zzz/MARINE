@@ -1,0 +1,111 @@
+/* Baltic GNSS Guard - light, readable teaching layout. */
+:root {
+  --bg: #ffffff;
+  --panel: #f6f7f9;
+  --ink: #1d1d1b;
+  --muted: #5f5e5a;
+  --border: rgba(128, 128, 128, 0.35);
+  --accent: #2a78d6;
+  --info-bg: #e8f1fc;
+  --warn-bg: #fff6d6;
+  --error-bg: #fde8e8;
+  --ok-bg: #e5f4e5;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.55 "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+a { color: var(--accent); }
+h2 { margin-top: 2.2rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+h3 { margin-top: 1.4rem; }
+
+.site-header { padding: 1rem 1.5rem 0.5rem; border-bottom: 1px solid var(--border); }
+.site-header h1 { margin: 0; font-size: 1.6rem; }
+.site-header p { margin: 0.2rem 0 0.4rem; color: var(--muted); }
+
+.layout { display: grid; grid-template-columns: 270px minmax(0, 1fr); }
+.sidebar {
+  background: var(--panel);
+  padding: 1rem;
+  border-right: 1px solid var(--border);
+  position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto;
+}
+.sidebar label { display: block; font-weight: 600; margin: 0.8rem 0 0.25rem; }
+.sidebar select, .sidebar button { width: 100%; padding: 0.4rem; font: inherit; }
+.sidebar .toggle { font-weight: 400; display: flex; gap: 0.4rem; align-items: center; }
+main { padding: 1rem 1.5rem 3rem; min-width: 0; }
+
+button { cursor: pointer; border: 1px solid var(--border); background: #fff;
+         border-radius: 6px; padding: 0.35rem 0.7rem; font: inherit; }
+button:hover { border-color: var(--accent); }
+.muted { color: var(--muted); font-size: 0.92rem; }
+.caption { color: var(--muted); font-size: 0.88rem; margin: 0.2rem 0 1rem; }
+
+.briefing { border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 1rem;
+            margin-bottom: 1rem; background: var(--panel); }
+.briefing summary { font-weight: 700; cursor: pointer; }
+
+.tabs { display: flex; gap: 0.3rem; border-bottom: 1px solid var(--border); margin-bottom: 1rem; }
+.tabs button { border: none; border-bottom: 3px solid transparent; border-radius: 0;
+               background: none; padding: 0.5rem 0.9rem; }
+.tabs button[aria-selected="true"] { border-bottom-color: var(--accent); font-weight: 700; }
+
+.time-label { display: block; font-weight: 600; margin-top: 0.8rem; }
+#time { width: 100%; }
+.moments { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.6rem 0; }
+
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.chart { width: 100%; min-height: 280px; }
+.chart.tall { min-height: 560px; }
+
+.metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1rem; margin-top: 1rem; }
+.metric .label { font-size: 0.9rem; }
+.metric .value { font-size: 1.7rem; font-weight: 600; }
+.metric .delta { display: inline-block; font-size: 0.82rem; border-radius: 10px;
+                 padding: 0 0.5rem; background: #eee; }
+.metric .delta.bad { background: var(--error-bg); color: #b42318; }
+
+.table-wrap { overflow-x: auto; margin-top: 0.8rem; }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th, td { border: 1px solid var(--border); padding: 0.3rem 0.55rem; text-align: left; }
+th { background: var(--panel); }
+td.num { text-align: right; }
+
+.note { border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.6rem 0; }
+.note.info { background: var(--info-bg); }
+.note.warn { background: var(--warn-bg); }
+.note.error { background: var(--error-bg); }
+.note.ok { background: var(--ok-bg); }
+
+.card { border: 1px solid var(--border); border-radius: 8px; padding: 0.55rem 0.8rem;
+        margin-bottom: 0.5rem; }
+.card .head { font-weight: 600; }
+.card .head .meta { font-weight: 400; color: var(--muted); }
+.card .badge { color: #fff; border-radius: 4px; padding: 1px 6px; font-size: 0.8rem; margin-left: 8px; }
+
+.banner { border-left: 14px solid; border-radius: 6px; padding: 0.6rem 1rem; }
+.banner .state { font-size: 1.7rem; font-weight: 700; }
+.banner .state small { font-size: 1rem; font-weight: 400; opacity: 0.85; }
+
+.playbook { display: grid; grid-template-columns: 3fr 2fr; gap: 1.2rem; }
+.rules { border: 1px solid var(--border); border-radius: 8px; padding: 0.4rem 1rem; }
+.progress { height: 10px; background: #e6e6e6; border-radius: 5px; overflow: hidden; }
+.progress > div { height: 100%; background: var(--accent); }
+
+.md table { margin: 0.6rem 0; }
+.math { overflow-x: auto; padding: 0.3rem 0; }
+.diagram svg { max-width: 760px; width: 100%; height: auto; }
+.deriv { border: 1px solid var(--border); border-radius: 8px; padding: 0.4rem 1rem; margin-bottom: 0.6rem; }
+.deriv summary { font-weight: 600; cursor: pointer; }
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+  .grid2, .playbook { grid-template-columns: 1fr; }
+  .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  main { padding: 1rem; }
+}

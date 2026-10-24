@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Baltic GNSS Guard</title>
+  <link rel="stylesheet" href="vendor/katex/katex.min.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <h1>Can we trust the satellite position? A Baltic Sea GNSS guard</h1>
+    <p>A teaching website: plain words first, then the details and the maths.</p>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" aria-label="Controls">
+      <label for="mode">Mode</label>
+      <select id="mode">
+        <option value="voyage">Baltic voyage (3 hours)</option>
+        <option value="short">Short test run (15 minutes)</option>
+      </select>
+
+      <label for="scenario">Scenario</label>
+      <select id="scenario"></select>
+      <p id="scenario-description" class="muted"></p>
+
+      <label for="step">Playback: seconds per tick</label>
+      <select id="step"></select>
+      <button id="play" type="button" class="wide">▶ Play</button>
+
+      <label class="toggle"><input id="compare" type="checkbox">
+        Compare with a healthy receiver</label>
+      <p id="start-info" class="muted"></p>
+    </aside>
+
+    <main>
+      <details class="briefing">
+        <summary>Why the Baltic Sea? (start here)</summary>
+        <div id="briefing"></div>
+        <details>
+          <summary>Further reading</summary>
+          <ul id="further-reading"></ul>
+        </details>
+      </details>
+
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="monitor" aria-selected="true">Monitor</button>
+        <button role="tab" data-tab="simple" aria-selected="false">Simple explanation</button>
+        <button role="tab" data-tab="derivations" aria-selected="false">Derivations</button>
+      </nav>
+
+      <section id="tab-monitor" class="tab">
+        <div id="loading" class="note info">Loading the simulation...</div>
+        <div id="data-label"></div>
+        <div id="moments" class="moments"></div>
+        <label for="time" class="time-label">Time: <span id="time-value">0</span> s -
+          pick any second of the voyage</label>
+        <input id="time" type="range" min="0" max="0" value="0">
+        <p id="status-line"></p>
+
+        <h2>1. What the receiver reports (the input)</h2>
+        <p data-section="input"></p>
+        <div class="grid2">
+          <div><div id="sky" class="chart"></div><p class="caption" data-caption="sky"></p></div>
+          <div><div id="cn0" class="chart"></div><p class="caption" data-caption="cn0_bars"></p></div>
+        </div>
+        <div id="sat-table" class="table-wrap"></div>
+        <p class="caption" data-caption="satellite_table"></p>
+        <div id="metrics" class="metrics"></div>
+        <p id="healthy-note" class="muted"></p>
+        <h3>The last 5 minutes</h3>
+        <div class="grid2">
+          <div><div id="h-cn0" class="chart"></div><p class="caption" data-caption="cn0_history"></p></div>
+          <div><div id="h-noise" class="chart"></div><p class="caption" data-caption="noise_history"></p></div>
+          <div><div id="h-count" class="chart"></div><p class="caption" data-caption="count_history"></p></div>
+          <div><div id="h-jump" class="chart"></div><p class="caption" data-caption="jump_history"></p></div>
+        </div>
+
+        <h2>2. The checks</h2>
+        <div data-section="checks" class="md"></div>
+        <div id="check-cards"></div>
+
+        <h2>3. The decision</h2>
+        <div id="decision"></div>
+
+        <h2>4. What the boat must do</h2>
+        <div id="playbook"></div>
+
+        <h2>5. Where the ship is</h2>
+        <div data-section="map" class="md"></div>
+        <div id="route-map" class="chart tall"></div>
+        <div id="danger-note"></div>
+        <p class="caption" data-caption="route_map"></p>
+        <div class="grid2">
+          <div><div id="closeup" class="chart"></div><p class="caption" data-caption="closeup_map"></p></div>
+          <div><div id="overview" class="chart"></div><p class="caption" data-caption="overview_map"></p></div>
+        </div>
+
+        <h2>6. How well did it do?</h2>
+        <div id="error-chart" class="chart"></div>
+        <p class="caption" data-caption="error_chart"></p>
+        <h3>All scenarios compared</h3>
+        <div id="comparison" class="table-wrap"></div>
+      </section>
+
+      <section id="tab-simple" class="tab md" hidden></section>
+      <section id="tab-derivations" class="tab" hidden>
+        <p id="derivations-intro"></p>
+        <div id="derivations"></div>
+      </section>
+    </main>
+  </div>
+
+  <script src="vendor/plotly.min.js"></script>
+  <script src="vendor/katex/katex.min.js"></script>
+  <script src="vendor/marked.min.js"></script>
+  <script src="js/util.js"></script>
+  <script src="data/content.js"></script>
+  <script src="data/chart.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/maps.js"></script>
+  <script src="js/sections.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
