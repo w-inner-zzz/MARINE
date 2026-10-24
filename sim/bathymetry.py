@@ -73,7 +73,7 @@ def parse_ascii_grid(text: str, source: str) -> DepthGrid:
     """Parse an ESRI ASCII grid of elevations (negative below sea level)."""
     lines = text.strip().splitlines()
     header = {}
-    while lines and lines[0].split()[0].isalpha():
+    while lines and lines[0].split()[0][0].isalpha():  # header keys start with a letter
         key, value = lines.pop(0).split()[:2]
         header[key.lower()] = float(value)
     nodata = header.get("nodata_value", -99999.0)
