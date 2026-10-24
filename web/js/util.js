@@ -3,6 +3,7 @@
 "use strict";
 
 window.MARINE = {
+  dataRoot: (window.MARINE_DATA_ROOT || "data/"),  // where data/ lives, relative to the page
   content: null,      // set by data/content.js
   rawScenarios: {},   // id -> packed text, filled by data/scenarios/*.js
   rawChart: null,     // packed text, filled by data/chart.js
@@ -34,7 +35,7 @@ MARINE.loadScript = function (src) {
 MARINE.getScenario = async function (mode, key) {
   const id = `${mode}/${key}`;
   if (!this.scenarios[id]) {
-    if (!this.rawScenarios[id]) await this.loadScript(`data/scenarios/${mode}_${key}.js`);
+    if (!this.rawScenarios[id]) await this.loadScript(`${this.dataRoot}scenarios/${mode}_${key}.js`);
     this.scenarios[id] = await this.unpack(this.rawScenarios[id]);
     delete this.rawScenarios[id];
   }
