@@ -4,6 +4,11 @@ Install: `pip install -r requirements.txt` (optional, needs internet: `python -m
 Test: `pytest`
 Run the websites: open `web-navigator/index.html` (bridge view) or `web/index.html` (full teaching site) in a browser, or in VS Code use Run ▸ "Open bridge view" / "Open full teaching website" (or right-click either `index.html` ▸ "Open with Live Server"); after changing Python code run `python export_web.py`. Streamlit version: `streamlit run app.py`.
 
+## How a problem is diagnosed
+Every second the 10 checks run in a fixed order and the first that fails decides the verdict, which then sets the ship's state ([`docs/diagnosis_flowchart.svg`](docs/diagnosis_flowchart.svg), PNG for slides alongside; regenerate with `python docs/flowchart.py`).
+
+![Diagnosis flow chart](docs/diagnosis_flowchart.svg)
+
 ## The 4 correctional methods (choose under "Solution" in the bridge view)
 When the guard stops trusting GNSS (LOST, JAMMING, SPOOFING, RECOVERING) it keeps navigating with dead reckoning: position += (speed through water × heading + learned sea current) every second, with an uncertainty that grows linearly. Each method corrects that estimate; every correction passes a plausibility gate (gap < 3 combined sigmas + 40 m) and is merged with a 1-D Kalman update, K = σ²/(σ² + σ_fix²). The **Accuracy** panel compares the resulting position with the simulated truth.
 1. **None (guard only)** – built-in fixes (`marine_guard/backup.py`). *Radar*: every 10 s the range to the coast north of the ship gives the north coordinate (coast position from the chart). *Depth profile*: every 30 s the last 60 s of soundings are slid east-west over the chart in 5 m steps; the shift with the smallest mean squared depth difference corrects the east coordinate.
