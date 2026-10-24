@@ -73,6 +73,19 @@ class ShipSensors:
     radar_range_to_coast_m: Optional[float]
 
 
+@dataclass(frozen=True)
+class AuxFix:
+    """An independent position fix from a non-GNSS aid, for example shore
+    pseudolites or a nearby ship tracked by radar. The guard checks it for
+    plausibility and uses it only while GNSS is not trusted."""
+
+    source: str
+    """Short name, e.g. "pseudolite" or "peer:2"."""
+    position: Position
+    sigma_m: float
+    """Accuracy (one standard deviation per axis, m)."""
+
+
 # ---------------------------------------------------------------- outputs
 
 
@@ -157,6 +170,8 @@ class GuardResult:
     baseline_agc_db: Optional[float] = None
     baseline_clock_s: Optional[float] = None
     """The learned 'normal' this second was compared with."""
+    aux_used: Tuple[str, ...] = field(default_factory=tuple)
+    """Sources of the independent fixes (AuxFix) accepted this second."""
 
     def to_dict(self) -> dict:
         return {
@@ -181,4 +196,5 @@ class GuardResult:
             "baseline_cn0_dbhz": self.baseline_cn0_dbhz,
             "baseline_agc_db": self.baseline_agc_db,
             "baseline_clock_s": self.baseline_clock_s,
+            "aux_used": list(self.aux_used),
         }

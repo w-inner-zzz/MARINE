@@ -2,7 +2,7 @@
 position can be trusted and, if not, navigates on backup sensors."""
 
 import statistics
-from typing import Optional, Tuple
+from typing import Optional, Sequence, Tuple
 
 from . import checks as chk
 from .actions import ACTIONS
@@ -10,7 +10,7 @@ from .backup import DeadReckoner
 from .config import GuardConfig
 from .geometry import LocalFrame
 from .geometry import hdop as compute_hdop
-from .types import (BACKUP_STATES, HARD_STATES, Chart, CheckResult, GnssEpoch,
+from .types import (BACKUP_STATES, HARD_STATES, AuxFix, Chart, CheckResult, GnssEpoch,
                     GuardResult, Position, ShipSensors, State)
 
 
@@ -34,7 +34,11 @@ class GnssGuard:
 
     # ------------------------------------------------------------------ API
 
-    def update(self, epoch: GnssEpoch, sensors: ShipSensors) -> GuardResult:
+    def update(self, epoch: GnssEpoch, sensors: ShipSensors,
+               aux_fixes: Sequence[AuxFix] = ()) -> GuardResult:
+        """aux_fixes: optional independent position fixes (pseudolites, nearby
+        ships...). They never change the health checks; while GNSS is not
+        trusted, plausible ones correct the dead reckoning."""
         now = epoch.timestamp
         if self._dr is None:
             self._start(epoch)
@@ -63,7 +67,7 @@ class GnssGuard:
         became_trusted = self._advance_state(verdict, epoch)
 
         # 4. Output and side effects of the new state.
-        position, uncertainty, fixes = self._apply_state(epoch, sensors, ctx)
+        position, uncertainty, fixes, aux_used = self._apply_state(epoch, sensors, ctx, aux_fixes)
         lat, lon = self.frame.to_latlon(*position)
         gnss_lat = gnss_lon = None
         if epoch.position is not None:
@@ -83,6 +87,7 @@ class GnssGuard:
             clean_seconds=self._clean_streak,
             clean_needed=self._clean_needed,
             fixes=fixes,
+            aux_used=aux_used,
             lat_deg=lat,
             lon_deg=lon,
             gnss_position=epoch.position,
@@ -135,21 +140,23 @@ class GnssGuard:
                 self.state = State.RECOVERING
         return False
 
-    def _apply_state(self, epoch: GnssEpoch, sensors: ShipSensors,
-                     ctx: chk.CheckContext) -> Tuple[Position, float, Tuple[str, ...]]:
+    def _apply_state(self, epoch: GnssEpoch, sensors: ShipSensors, ctx: chk.CheckContext,
+                     aux_fixes: Sequence[AuxFix]
+                     ) -> Tuple[Position, float, Tuple[str, ...], Tuple[str, ...]]:
         dr = self._dr
         if self.state == State.TRUSTED:
             self._learn(epoch)
-            return epoch.position, self.config.trusted_uncertainty, ()
+            return epoch.position, self.config.trusted_uncertainty, (), ()
 
         if self.state == State.DEGRADED:
             w = self.config.blend_weight
             (gx, gy), (dx, dy) = epoch.position, dr.position
             blended = (dx + w * (gx - dx), dy + w * (gy - dy))
-            return blended, max(dr.total_uncertainty, ctx.gap), ()
+            return blended, max(dr.total_uncertainty, ctx.gap), (), ()
 
         fixes = self._backup_fixes(epoch.timestamp, sensors)
-        return dr.position, dr.total_uncertainty, fixes
+        aux_used = self._aux_fixes(aux_fixes)
+        return dr.position, dr.total_uncertainty, fixes, aux_used
 
     def _learn(self, epoch: GnssEpoch) -> None:
         """Only while trusted: track slow changes of 'normal' and the current."""
@@ -184,6 +191,11 @@ class GnssGuard:
             if self.chart is not None and self._dr.depth_fix(self.chart):
                 fixes.append("depth")
         return tuple(fixes)
+
+    def _aux_fixes(self, aux_fixes: Sequence[AuxFix]) -> Tuple[str, ...]:
+        if not self.config.use_aux_fixes:
+            return ()
+        return tuple(f.source for f in aux_fixes if self._dr.aux_fix(f.position, f.sigma_m))
 
     def _coast_y_north_of_estimate(self) -> Optional[float]:
         coast_y_at = getattr(self.chart, "coast_y_at", None)

@@ -27,9 +27,9 @@ def geometry_row(sat: SatInfo) -> List[float]:
     ]
 
 
-def invert_4x4(matrix: Sequence[Sequence[float]]) -> Optional[Matrix]:
-    """Gauss-Jordan inverse with partial pivoting. None if singular."""
-    n = 4
+def invert(matrix: Sequence[Sequence[float]]) -> Optional[Matrix]:
+    """Gauss-Jordan inverse of a square matrix with partial pivoting. None if singular."""
+    n = len(matrix)
     work = [list(map(float, row)) + [1.0 if i == j else 0.0 for j in range(n)]
             for i, row in enumerate(matrix)]
     for col in range(n):
@@ -44,6 +44,13 @@ def invert_4x4(matrix: Sequence[Sequence[float]]) -> Optional[Matrix]:
                 factor = work[r][col]
                 work[r] = [a - factor * b for a, b in zip(work[r], work[col])]
     return [row[n:] for row in work]
+
+
+def invert_4x4(matrix: Sequence[Sequence[float]]) -> Optional[Matrix]:
+    """Inverse of the 4x4 normal matrix used for HDOP. None if singular."""
+    if len(matrix) != 4:
+        raise ValueError("expected a 4x4 matrix")
+    return invert(matrix)
 
 
 def hdop(satellites: Iterable[SatInfo]) -> Optional[float]:

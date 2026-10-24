@@ -3,12 +3,13 @@
 from .actions import ACTIONS
 from .config import GuardConfig
 from .guard import GnssGuard
-from .types import (Action, CheckResult, GnssEpoch, GuardResult, SatInfo,
+from .types import (Action, AuxFix, CheckResult, GnssEpoch, GuardResult, SatInfo,
                     ShipSensors, State)
 
 __all__ = [
     "ACTIONS",
     "Action",
+    "AuxFix",
     "CheckResult",
     "GnssEpoch",
     "GnssGuard",

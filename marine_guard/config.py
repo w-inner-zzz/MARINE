@@ -139,3 +139,17 @@ class GuardConfig:
 
     depth_fix_sigma: float = 20.0
     """Accuracy of an accepted depth-profile fix (m)."""
+
+    # --- Independent fixes from other aids (pseudolites, nearby ships) ----
+    use_aux_fixes: bool = True
+    """Use independent fixes (AuxFix) while GNSS is not trusted."""
+
+    aux_gate_k: float = 3.0
+    """An independent fix is accepted only within this many combined sigmas ..."""
+
+    aux_gate_floor_m: float = 40.0
+    """... plus this fixed allowance (m). Unencrypted fixes that pass the gate
+    are trusted, so a slowly drifting fake can still lead the ship astray."""
+
+    max_pseudolite_hdop: float = 5.0
+    """Pseudolite fixes with worse station geometry than this are dropped."""

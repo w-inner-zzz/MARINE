@@ -121,6 +121,19 @@ class DeadReckoner:
         self.move_by(0.0, new_y - self.y)
         return True
 
+    def aux_fix(self, position: Position, sigma_m: float) -> bool:
+        """Fuse an independent position fix if it is plausible. Returns True if
+        it was accepted."""
+        cfg = self._cfg
+        gap = math.hypot(position[0] - self.x, position[1] - self.y)
+        limit = cfg.aux_gate_k * math.hypot(self.total_uncertainty, sigma_m) + cfg.aux_gate_floor_m
+        if gap >= limit:
+            return False
+        new_x, self.sigma_x = fuse(self.x, self.sigma_x, position[0], sigma_m)
+        new_y, self.sigma_y = fuse(self.y, self.sigma_y, position[1], sigma_m)
+        self.move_by(new_x - self.x, new_y - self.y)
+        return True
+
     def depth_fix(self, chart: Chart) -> bool:
         """Correct the east coordinate by matching the depth profile.
         Returns True if the fix was accepted."""
