@@ -6,7 +6,7 @@ from functools import lru_cache
 import pytest
 
 from marine_guard import AuxFix, GnssGuard, GnssEpoch, ShipSensors, State
-from marine_guard.aux import peer_fix, pseudolite_fix
+from marine_guard.aids import peer_fix, pseudolite_fix
 from sim.runner import run_scenario
 
 

@@ -20,7 +20,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from marine_guard import AuxFix, GuardConfig
-from marine_guard.aux import peer_fix, pseudolite_fix
+from marine_guard.aids import peer_fix, pseudolite_fix
 from marine_guard.geometry import LocalFrame
 
 from .scenarios import Scenario
