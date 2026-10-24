@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GNSS Guard Bridge</title>
+  <link rel="stylesheet" href="css/navigator.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" aria-label="Controls">
+      <div class="brand">GNSS Guard</div>
+      <label for="mode">Mode</label>
+      <select id="mode">
+        <option value="voyage">Baltic voyage (3 h)</option>
+        <option value="short">Short run (15 min)</option>
+      </select>
+      <label for="scenario">Scenario</label>
+      <select id="scenario"></select>
+      <label for="speed">Playback</label>
+      <select id="speed"></select>
+      <button id="play" type="button">▷ Play</button>
+    </aside>
+
+    <main>
+      <div class="clock">
+        <span id="clock">00:00:00</span>
+        <input id="time" type="range" min="0" max="0" value="0" aria-label="Time">
+      </div>
+
+      <div class="top">
+        <section id="status" class="panel status" aria-live="polite">
+          <div class="confidence">Confidence <b id="confidence">-</b></div>
+          <div id="state" class="state">-</div>
+          <div id="state-line" class="state-line"></div>
+          <div id="vitals" class="vitals"></div>
+        </section>
+
+        <section class="panel instructions">
+          <h2>Live instructions</h2>
+          <ol id="instructions" class="log"></ol>
+        </section>
+      </div>
+
+      <section class="checks-area">
+        <h2>10 checks <span class="legend"><i class="dot ok"></i> good
+          <i class="dot bad"></i> bad <i class="dot skip"></i> no data</span></h2>
+        <div id="checks" class="checks"></div>
+      </section>
+
+      <section class="panel map-panel">
+        <div class="map-head"><h2>Live map</h2><span id="map-legend" class="map-legend"></span></div>
+        <div id="map" class="map"></div>
+      </section>
+
+      <p id="loading" class="loading">Loading...</p>
+    </main>
+  </div>
+
+  <!-- Data and libraries are shared with the full website in ../web/ -->
+  <script>window.MARINE_DATA_ROOT = "../web/data/";</script>
+  <script src="../web/vendor/plotly.min.js"></script>
+  <script src="../web/js/util.js"></script>
+  <script src="../web/data/content.js"></script>
+  <script src="../web/data/chart.js"></script>
+  <script src="../web/js/maps.js"></script>
+  <script src="js/navigator.js"></script>
+</body>
+</html>
