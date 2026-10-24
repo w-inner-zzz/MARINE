@@ -34,9 +34,13 @@ WINDOWS_RESERVED = {"con", "prn", "aux", "nul", *(f"com{i}" for i in range(1, 10
                     *(f"lpt{i}" for i in range(1, 10))}
 
 
+NOT_COMMITTED = {".git", "__pycache__", ".pytest_cache", ".venv", "venv"}
+
+
 def test_no_file_names_that_windows_cannot_create():
+    """Windows cannot check out files such as aux.py or con.txt."""
     root = PACKAGE.parent
     for path in root.rglob("*"):
-        if ".git" in path.parts:
+        if NOT_COMMITTED.intersection(path.relative_to(root).parts):
             continue
         assert path.name.split(".")[0].lower() not in WINDOWS_RESERVED, path
