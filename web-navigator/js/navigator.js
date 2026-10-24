@@ -31,7 +31,9 @@
   const AID_INSTRUCTION = {
     pseudolites: "Position from shore stations (pseudolites)",
     peers: "Position from nearby ships: unverified, cross-check radar",
+    seabed: "Position from seabed matching (sounder + chart)",
   };
+  const SEABED_LOOKBACK_S = 1800;
 
   // One short line per state, shown under the big status word.
   const STATE_LINE = {
@@ -121,9 +123,26 @@
       if (!S.aid_offered[t]) return `${heard} stations · no fix`;
       return `${heard} stations · ${inUse ? "in use" : standby ? "standby" : "rejected"}`;
     }
+    if (solution === "seabed") {
+      if (standby) return "standby";
+      const last = lastSeabed(S, t);
+      if (!last) return "collecting soundings";
+      if (last.fix === 0) return "no clear match";
+      const [, , east, north, used] = last.fix;
+      const fmt = (v) => (v === null ? "?" : `±${v}`);
+      return `fix ${fmt(east)}/${fmt(north)} m · ${used ? "used" : "rejected"}`;
+    }
     const inRadar = S.peers[t].filter((p) => p[2]).length;
     if (standby) return `${inRadar} ships · standby`;
     return `${bits(S.peers_used[t])}/${inRadar} ships used`;
+  }
+
+  // Latest seabed match attempt at or before t: { t, fix } or null.
+  function lastSeabed(S, t) {
+    for (let i = t; i >= Math.max(0, t - SEABED_LOOKBACK_S); i--) {
+      if (S.seabed[i] !== null) return { t: i, fix: S.seabed[i] };
+    }
+    return null;
   }
 
   function computeTransitions(S) {
@@ -325,7 +344,72 @@
           marker: { symbol: "circle", size: 13, color: colour, line: { width: 2, color: "white" } } },
       ];
     }
+    if (solution === "seabed") {
+      const fixes = [];
+      for (let i = Math.max(0, t - SEABED_LOOKBACK_S); i <= t; i++) {
+        if (Array.isArray(S.seabed[i])) fixes.push(S.seabed[i]);
+      }
+      return [{ type: "scatter", mode: "markers", x: fixes.map((f) => f[1]), y: fixes.map((f) => f[0]),
+        hovertemplate: "seabed fix<extra></extra>",
+        marker: { symbol: "diamond", size: 12, line: { width: 2, color: "white" },
+                  color: fixes.map((f) => (f[4] ? "#1baf7a" : "#e34948")) } }];
+    }
     return [];
+  }
+
+  // ------------------------------------------------------------ accuracy
+
+  // Whole-run error curves, built once per loaded scenario.
+  function accuracySeries(S) {
+    const every = S.meta.voyage ? 10 : 1;
+    const t = [], err = [], claimed = [];
+    for (let i = 0; i < S.gerr.length; i += every) {
+      t.push(i); err.push(Math.max(S.gerr[i], 0.1)); claimed.push(S.unc[i]);
+    }
+    return { t, err, claimed };
+  }
+
+  function renderAccuracy(S, t) {
+    const err = S.gerr[t], claimed = S.unc[t];
+    const fmt = (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)} km` : `${v.toFixed(0)} m`);
+    $("acc-error").textContent = fmt(err);
+    $("acc-claimed").textContent = `±${fmt(claimed)}`;
+    $("acc-method").textContent = C().solutions.find((x) => x.key === S.meta.solution).title;
+    const [label, colour] = err <= claimed ? ["WITHIN ESTIMATE", "#008300"]
+      : err <= 2 * claimed ? ["SLIGHTLY OFF", "#eda100"] : ["WORSE THAN IT THINKS", "#e34948"];
+    $("accuracy-badge").textContent = label;
+    $("accuracy-badge").style.background = colour;
+
+    const series = view.accuracy;
+    const m = S.meta;
+    const shapes = [{ type: "line", x0: t, x1: t, yref: "paper", y0: 0, y1: 1,
+                      line: { color: "#1d2733", width: 2 } }];
+    if (m.event_start !== null) {
+      shapes.push({ type: "rect", x0: m.event_start, x1: m.event_end, yref: "paper", y0: 0, y1: 1,
+                    fillcolor: "rgba(150,150,150,0.18)", line: { width: 0 }, layer: "below" });
+    }
+    Plotly.react("accuracy-chart", [
+      { type: "scatter", mode: "lines", name: "ship's own estimate (±)", x: series.t, y: series.claimed,
+        line: { color: "#8a8986", width: 2, dash: "dash" } },
+      { type: "scatter", mode: "lines", name: "actual error", x: series.t, y: series.err,
+        line: { color: "#2a78d6", width: 2 } },
+    ], {
+      height: 240, margin: { l: 50, r: 10, t: 10, b: 35 }, shapes,
+      legend: { orientation: "h", y: 1.12, x: 0 }, paper_bgcolor: "#ffffff", plot_bgcolor: "#ffffff",
+      xaxis: { title: { text: "time (s)" } },
+      yaxis: { type: "log", title: { text: "metres" }, tickvals: [0.1, 1, 10, 100, 1000, 10000],
+               ticktext: ["0.1", "1", "10", "100", "1 km", "10 km"] },
+    }, { responsive: true, displaylogo: false });
+
+    const rows = C().accuracy[view.mode][view.key];
+    $("accuracy-table").innerHTML = `<table><caption>All 4 methods, this scenario
+      (${m.event_start === null ? "whole run" : "during the event"})</caption>
+      <tr><th>Method</th><th>Average</th><th>Worst</th><th>Within estimate</th></tr>
+      ${C().solutions.map((sol) => {
+        const a = rows[sol.key];
+        return `<tr class="${sol.key === S.meta.solution ? "current" : ""}"><td>${NAV.escape(sol.title)}</td>
+          <td>${fmt(a.mean_m)}</td><td>${fmt(a.worst_m)}</td><td>${a.within_pct}%</td></tr>`;
+      }).join("")}</table>`;
   }
 
   // Simulation only: where the ship really is (a real crew cannot see this).
@@ -410,6 +494,7 @@
       `<span style="color:${color};margin-left:0.8rem">${shape}</span> ${label}`;
     const aid = view.solution === "pseudolites" ? dot("#1b4f72", "shore station", "▲")
       : view.solution === "peers" ? dot("#008300", "ship used", "●") + dot("#e34948", "ship rejected", "●")
+      : view.solution === "seabed" ? dot("#1baf7a", "seabed fix used", "◆") + dot("#e34948", "rejected", "◆")
       : "";
     $("map-legend").innerHTML =
       item(pal().ship_track, "GNSS track") + item(pal().green_path, "backup track") +
@@ -440,6 +525,7 @@
     renderChecks(S, t);
     renderMap(S, t);
     renderSignal(S, t);
+    renderAccuracy(S, t);
   }
 
   function requestRender() {
@@ -492,6 +578,7 @@
     }
     $("loading").hidden = true;
     view.transitions = computeTransitions(view.S);
+    view.accuracy = accuracySeries(view.S);
     $("time").max = view.S.state.length - 1;
     renderMapLegend();
     setTime(keepTime ? view.t : 0);

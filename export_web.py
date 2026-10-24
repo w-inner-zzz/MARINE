@@ -12,6 +12,7 @@ also works when index.html is opened straight from disk (file://).
 import base64
 import gzip
 import json
+import math
 import pathlib
 import shutil
 from dataclasses import asdict
@@ -240,10 +241,41 @@ def navigator_scenario(run: Run) -> dict:
                              for x, y, in_range in w.aid.peers] for w in run.rows]
         payload["peers_used"] = [_bitmask(int(s.split(":")[1]) for s in w.result.aux_used)
                                  for w in run.rows]
+    if run.solution == "seabed":
+        payload["seabed"] = [_seabed_fix(run, w) for w in run.rows]
     return payload
 
 
-def navigator_content(cfg: GuardConfig, content: dict, chart: dict) -> dict:
+def _finite(value: float, digits: int):
+    return None if math.isinf(value) else r(value, digits)
+
+
+def _seabed_fix(run: Run, row) -> object:
+    """Per second: None (no attempt), 0 (attempt, no clear match) or
+    [lat, lon, sigma east, sigma north (None = no information), accepted]."""
+    if not row.aid or not row.aid.seabed_tried:
+        return None
+    if not row.aid.fixes:
+        return 0
+    fix = row.aid.fixes[0]
+    lat, lon = run.frame.to_latlon(*fix.position)
+    return [r(lat, 6), r(lon, 6), _finite(fix.sigma_m, 0), _finite(fix.sigma_north, 0),
+            int("seabed" in row.result.aux_used)]
+
+
+def accuracy_summary(run: Run) -> dict:
+    """How close the ship's position was to the truth: during the event
+    (plus two minutes of recovery), or over the whole run without an event."""
+    sc = run.scenario
+    rows = [w for w in run.rows if sc.event_start is None
+            or sc.event_start <= w.t < sc.event_end + 120]
+    errors = [w.guard_error for w in rows]
+    within = sum(w.guard_error <= w.result.uncertainty_m for w in rows)
+    return {"mean_m": r(sum(errors) / len(errors), 1), "worst_m": r(max(errors), 1),
+            "within_pct": r(100.0 * within / len(rows), 0)}
+
+
+def navigator_content(cfg: GuardConfig, content: dict, chart: dict, accuracy: dict) -> dict:
     return {
         "states": content["states"],
         "verdicts": content["verdicts"],
@@ -259,6 +291,7 @@ def navigator_content(cfg: GuardConfig, content: dict, chart: dict) -> dict:
         "solutions": [{"key": k, "title": t} for k, t in SOLUTIONS.items()],
         "stations": [{"name": n, "lat": lat, "lon": lon} for n, lat, lon in PSEUDOLITE_SITES],
         "peers": [p[0] for p in PEERS],
+        "accuracy": accuracy,
     }
 
 
@@ -266,6 +299,7 @@ def main() -> None:
     cfg = GuardConfig()
     shutil.rmtree(NAV_DATA / "scenarios", ignore_errors=True)  # drop files of old layouts
     comparison = {"voyage": [], "short": []}
+    accuracy = {"voyage": {}, "short": {}}
     for mode, voyage, scenarios in (("voyage", True, VOYAGE_SCENARIOS),
                                     ("short", False, SCENARIOS)):
         for key in scenarios:
@@ -276,6 +310,7 @@ def main() -> None:
             for solution in SOLUTIONS:
                 aided = run if solution == "none" else run_scenario(key, voyage=voyage,
                                                                     solution=solution)
+                accuracy[mode].setdefault(key, {})[solution] = accuracy_summary(aided)
                 write_js(NAV_DATA / "scenarios" / f"{mode}_{key}_{solution}.js",
                          f'NAV.registerScenario("{mode}/{key}/{solution}", '
                          f'"{packed(navigator_scenario(aided))}");')
@@ -291,7 +326,7 @@ def main() -> None:
     write_js(WEB_DATA / "content.js",
              "MARINE.content = " + json.dumps(content, ensure_ascii=False, indent=1) + ";")
     write_js(NAV_DATA / "content.js",
-             f'NAV.registerContent("{packed(navigator_content(cfg, content, chart))}");')
+             f'NAV.registerContent("{packed(navigator_content(cfg, content, chart, accuracy))}");')
     print(f"wrote {WEB_DATA} and {NAV_DATA}")
 
 
