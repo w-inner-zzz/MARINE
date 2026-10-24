@@ -2,3 +2,4 @@ numpy
 streamlit
 plotly
 pytest
+global-land-mask
