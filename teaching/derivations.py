@@ -279,10 +279,10 @@ def _state_machine_svg(cfg: GuardConfig) -> str:
                 f'stroke="#333"/><text x="{x + w / 2}" y="{y + 25}" text-anchor="middle">'
                 f'{label}</text>')
 
-    def arrow(path, label, lx, ly):
+    def arrow(path, label, lx, ly, anchor="middle"):
         return (f'<path d="{path}" fill="none" stroke="#333" stroke-width="1.5" '
                 f'marker-end="url(#head)"/><text x="{lx}" y="{ly}" font-size="12" '
-                f'text-anchor="middle">{label}</text>')
+                f'text-anchor="{anchor}">{label}</text>')
 
     parts = [
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 270" '
@@ -294,11 +294,11 @@ def _state_machine_svg(cfg: GuardConfig) -> str:
         box(220, 15, 130, "DEGRADED", "#ffe0a3"),
         box(300, 110, 220, "LOST / JAMMING / SPOOFING", "#f6c1c0"),
         box(600, 200, 140, "RECOVERING", "#c6dcf5"),
-        arrow("M90,110 Q120,30 218,32", "DEGRADED verdict", 105, 55),
+        arrow("M90,110 Q120,30 218,32", "DEGRADED verdict", 112, 28, "end"),
         arrow(f"M230,57 Q180,95 142,120", f"{cfg.recover_soft_s} clean s", 205, 105),
-        arrow("M142,135 L298,135", "hard verdict", 220, 128),
+        arrow("M142,135 L298,135", "hard verdict", 220, 152),
         arrow("M330,57 L385,108", "hard verdict", 395, 80),
-        arrow("M520,140 Q580,150 610,198", "clean second", 595, 160),
+        arrow("M520,140 Q580,150 610,198", "clean second", 615, 160, "start"),
         arrow("M600,228 Q470,215 445,153", "hard verdict (count resets)", 500, 235),
         arrow("M670,242 L670,262 L80,262 L80,153", f"{cfg.recover_hard_s} clean s", 380, 256),
         "</svg>",
