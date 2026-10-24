@@ -11,18 +11,20 @@
     <aside class="sidebar" aria-label="Controls">
       <div class="brand">GNSS Guard</div>
       <label for="mode">Mode</label>
-      <select id="mode">
+      <select id="mode" autocomplete="off">
         <option value="voyage">Baltic voyage (3 h)</option>
         <option value="short">Short run (15 min)</option>
       </select>
       <label for="scenario">Scenario</label>
-      <select id="scenario"></select>
+      <select id="scenario" autocomplete="off"></select>
       <label for="speed">Playback</label>
-      <select id="speed"></select>
+      <select id="speed" autocomplete="off"></select>
       <button id="play" type="button">▷ Play</button>
     </aside>
 
     <main>
+      <div id="error" class="error" role="alert" hidden></div>
+      <p id="loading" class="loading">Loading...</p>
       <div class="clock">
         <span id="clock">00:00:00</span>
         <input id="time" type="range" min="0" max="0" value="0" aria-label="Time">
@@ -53,17 +55,13 @@
         <div id="map" class="map"></div>
       </section>
 
-      <p id="loading" class="loading">Loading...</p>
     </main>
   </div>
 
-  <!-- Data and libraries are shared with the full website in ../web/ -->
-  <script>window.MARINE_DATA_ROOT = "../web/data/";</script>
-  <script src="../web/vendor/plotly.min.js"></script>
-  <script src="../web/js/util.js"></script>
-  <script src="../web/data/content.js"></script>
-  <script src="../web/data/chart.js"></script>
-  <script src="../web/js/maps.js"></script>
+  <!-- Everything is inside this folder; data/ is written by `python export_web.py`. -->
+  <script src="js/data.js"></script>
+  <script src="vendor/plotly.min.js"></script>
+  <script src="data/content.js"></script>
   <script src="js/navigator.js"></script>
 </body>
 </html>

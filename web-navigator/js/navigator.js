@@ -1,11 +1,13 @@
 // Bridge view: status, instructions, vital readings, checks and map at a glance.
-// Uses the data exported for the full website (../web/data).
+// Uses only files inside web-navigator/ (data/ is written by export_web.py).
 "use strict";
 
 (function () {
   const $ = (id) => document.getElementById(id);
-  const C = () => MARINE.content;
-  const pal = () => MARINE.content.palette;
+  const C = () => NAV.content;
+  const pal = () => NAV.content.palette;
+  const M_PER_DEG = 111195;
+  const SEA_SCALE = [[0, "#d6eaf8"], [1, "#1b4f72"]];
   const KNOT_MPS = 0.514444;
   const TICK_MS = 250;
   const SPEEDS = {
@@ -57,10 +59,6 @@
     return "LOW";
   }
 
-  function meanCn0(S, t) {
-    const values = S.sats[t].filter((s) => s[4]).map((s) => s[3]);
-    return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
-  }
 
   // ------------------------------------------------------------- panels
 
@@ -75,9 +73,9 @@
       : STATE_LINE[state];
     $("confidence").innerHTML = `${confidence(S.unc[t])}<small style="display:block;font-weight:500;` +
       `font-size:0.85rem;color:var(--muted)">±${S.unc[t].toFixed(0)} m</small>`;
-    const cn0 = meanCn0(S, t);
+    const cn0 = S.cn0[t];
     const vitals = [
-      ["Position", MARINE.fmtLatLon(S.lat[t], S.lon[t])],
+      ["Position", NAV.fmtLatLon(S.lat[t], S.lon[t])],
       ["Heading", `${((S.heading[t] % 360) + 360) % 360 | 0}°`],
       ["Speed", `${(S.speed[t] / KNOT_MPS).toFixed(1)} kn`],
       ["Satellites", `${S.nsat[t]}`],
@@ -85,7 +83,7 @@
       ["Noise", `${S.agc[t].toFixed(1)} dB`],
     ];
     $("vitals").innerHTML = vitals.map(([k, v]) =>
-      `<div class="vital"><span>${k}</span><b>${MARINE.escape(v)}</b></div>`).join("");
+      `<div class="vital"><span>${k}</span><b>${NAV.escape(v)}</b></div>`).join("");
   }
 
   function computeTransitions(S) {
@@ -107,7 +105,7 @@
       const color = pal().states[x.state];
       return `<li class="${i === 0 ? "now" : ""}" style="border-left-color:${color};--entry:${color}">
         <span class="when">${clock(x.t)}</span><span class="chip" style="background:${color}">${x.state}</span>
-        <ul>${instructionLines(x.state).map((l) => `<li>${MARINE.escape(l)}</li>`).join("")}</ul></li>`;
+        <ul>${instructionLines(x.state).map((l) => `<li>${NAV.escape(l)}</li>`).join("")}</ul></li>`;
     }).join("");
   }
 
@@ -126,13 +124,58 @@
     $("checks").innerHTML = S.checks[t].map(([passed, value, threshold], i) => {
       const name = C().checks[i].name;
       const cls = passed === null ? "skip" : passed ? "ok" : "bad";
-      return `<div class="check ${cls}" title="${MARINE.escape(C().check_explanations[name].if_fails)}">
+      return `<div class="check ${cls}" title="${NAV.escape(C().checks[i].if_fails)}">
         <span>${CHECK_TILES[name][0]}</span>
-        <span class="reading">${MARINE.escape(reading(name, value, threshold, passed))}</span></div>`;
+        <span class="reading">${NAV.escape(reading(name, value, threshold, passed))}</span></div>`;
     }).join("");
   }
 
   // ---------------------------------------------------------------- map
+
+  function circle(lat, lon, radiusM) {
+    const x = [], y = [];
+    for (let k = 0; k <= 60; k++) {
+      const a = 2 * Math.PI * k / 60;
+      x.push(lon + radiusM * Math.cos(a) / (M_PER_DEG * Math.cos(lat * Math.PI / 180)));
+      y.push(lat + radiusM * Math.sin(a) / M_PER_DEG);
+    }
+    return { x, y };
+  }
+
+  // A view around the points, widened to roughly the shape of the plot.
+  function bounds(points, marginDeg, minSpanDeg, widthToHeight) {
+    const lats = points.map((p) => p[0]), lons = points.map((p) => p[1]);
+    const latC = (Math.min(...lats) + Math.max(...lats)) / 2;
+    const lonC = (Math.min(...lons) + Math.max(...lons)) / 2;
+    const shrink = Math.cos(latC * Math.PI / 180);
+    let latHalf = Math.max((Math.max(...lats) - Math.min(...lats)) / 2 + marginDeg, minSpanDeg / 2);
+    let lonHalf = Math.max((Math.max(...lons) - Math.min(...lons)) / 2 + marginDeg / shrink, minSpanDeg);
+    lonHalf = Math.max(lonHalf, latHalf * widthToHeight / shrink);
+    latHalf = Math.max(latHalf, lonHalf * shrink / widthToHeight);
+    return [[latC - latHalf, latC + latHalf], [lonC - lonHalf, lonC + lonHalf]];
+  }
+
+  // Sea depth (smoothed) and land from the chart grid, cropped to the view.
+  function depthBackground(latRange, lonRange) {
+    const g = C().route_grid;
+    const pick = (n, origin, step, lo, hi) => [...Array(n).keys()]
+      .filter((i) => origin + i * step >= lo - 0.02 && origin + i * step <= hi + 0.02);
+    const rows = pick(g.depth.length, g.lat0, g.dlat, ...latRange);
+    const cols = pick(g.depth[0].length, g.lon0, g.dlon, ...lonRange);
+    if (!rows.length || !cols.length) return [];
+    const every = Math.max(1, Math.ceil(Math.max(rows.length, cols.length) / 200));
+    const R = rows.filter((_, i) => i % every === 0), Cs = cols.filter((_, i) => i % every === 0);
+    const lats = R.map((r) => g.lat0 + r * g.dlat), lons = Cs.map((c) => g.lon0 + c * g.dlon);
+    const isLand = (r, c) => g.depth[r][c] === 255;
+    return [
+      { type: "heatmap", x: lons, y: lats, zsmooth: "best", showscale: false, hoverinfo: "skip",
+        z: R.map((r) => Cs.map((c) => (isLand(r, c) ? null : g.depth[r][c]))),
+        colorscale: SEA_SCALE, zmin: 0, zmax: 100 },
+      { type: "heatmap", x: lons, y: lats, showscale: false, hoverinfo: "skip",
+        z: R.map((r) => Cs.map((c) => (isLand(r, c) ? 1 : null))),
+        colorscale: [[0, pal().land], [1, pal().land]] },
+    ];
+  }
 
   function segment(S, t0, t1, latKey, lonKey, keep) {
     const x = [], y = [];
@@ -154,7 +197,7 @@
         pts.push([S.lat[i], S.lon[i]]);
         if (stateAt(i) !== "TRUSTED" && S.glat[i] !== null) pts.push([S.glat[i], S.glon[i]]);
       }
-      return MARINE.maps.bounds(pts, 0.01, 0.02, 2.2);
+      return bounds(pts, 0.01, 0.02, 2.2);
     }
     const halfM = 3000;
     const dLat = halfM / 111195, dLon = dLat / Math.cos(lat * Math.PI / 180);
@@ -165,13 +208,11 @@
     const [latRange, lonRange] = mapRange(S, t);
     const trusted = (i) => stateAt(i) === "TRUSTED";
     const start = view.mapView === "route" ? 0 : Math.max(0, t - 1800);
-    const traces = S.meta.voyage ? MARINE.maps.chartBackground(view.chart, latRange, lonRange) : [];
-    traces.forEach((tr) => { tr.showscale = false; });
-    if (traces.length) traces[0].zsmooth = "best";  // smooth depth shading at ship zoom
+    const traces = S.meta.voyage ? depthBackground(latRange, lonRange) : [];
     const track = segment(S, start, t, "lat", "lon", trusted);
     const backup = segment(S, start, t, "lat", "lon", (i) => !trusted(i));
     const gnss = segment(S, start, t, "glat", "glon", (i) => !trusted(i));
-    const ring = MARINE.maps.circle(S.lat[t], S.lon[t], S.unc[t]);
+    const ring = circle(S.lat[t], S.lon[t], S.unc[t]);
     const color = pal().states[stateAt(t)];
     traces.push(
       { type: "scatter", mode: "lines", x: track.x, y: track.y, line: { color: pal().ship_track, width: 3 } },
@@ -252,7 +293,7 @@
 
   function fillControls() {
     $("scenario").innerHTML = C().scenarios[view.mode]
-      .map((s) => `<option value="${s.key}">${MARINE.escape(s.title)}</option>`).join("");
+      .map((s) => `<option value="${s.key}">${NAV.escape(s.title)}</option>`).join("");
     $("scenario").value = view.key;
     $("speed").innerHTML = SPEEDS[view.mode].map(([v, label]) => `<option value="${v}">${label}</option>`).join("");
     $("speed").selectedIndex = 1;
@@ -262,9 +303,10 @@
     stop();
     $("loading").hidden = false;
     try {
-      view.S = await MARINE.getScenario(view.mode, view.key);
+      view.S = await NAV.getScenario(view.mode, view.key);
     } catch (err) {
-      $("loading").textContent = err.message;
+      $("loading").hidden = true;
+      NAV.fail(err.message);
       return;
     }
     $("loading").hidden = true;
@@ -274,11 +316,17 @@
   }
 
   async function start() {
-    if (!MARINE.content || !MARINE.rawChart) {
-      $("loading").textContent = "Data missing: run `python export_web.py` (it writes ../web/data).";
+    try {
+      if (typeof Plotly === "undefined") {
+        throw new Error("The map library is missing (web-navigator/vendor/plotly.min.js).");
+      }
+      await NAV.getContent();
+    } catch (err) {
+      $("loading").hidden = true;
+      NAV.fail(err.message);
       return;
     }
-    view.chart = await MARINE.getChart();
+    view.mode = $("mode").value;  // the browser may restore the last selection on reload
     fillControls();
     renderMapLegend();
     $("mode").addEventListener("change", () => {

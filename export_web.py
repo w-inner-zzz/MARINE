@@ -32,6 +32,8 @@ from teaching.simple import simple_blocks
 from teaching.sources import SOURCES
 
 WEB_DATA = pathlib.Path(__file__).resolve().parent / "web" / "data"
+NAV_DATA = pathlib.Path(__file__).resolve().parent / "web-navigator" / "data"
+"""The bridge view gets its own, slimmer copy so that folder works on its own."""
 STATES = [s.value for s in State]
 VERDICTS = ["OK", "DEGRADED", "LOST", "JAMMING", "SPOOFING"]
 DERIVATION_EXAMPLE = ("normal", 600)
@@ -200,6 +202,36 @@ def content_payload(cfg: GuardConfig, example: Run) -> dict:
     }
 
 
+# ------------------------------------------------------- bridge view
+
+
+def navigator_scenario(run: Run) -> dict:
+    """Only what the bridge view shows: status, vitals, checks and the map."""
+    full = scenario_payload(run)
+    keep = ("meta", "state", "lat", "lon", "unc", "heading", "speed", "nsat", "agc",
+            "clean", "need", "glat", "glon")
+    payload = {k: full[k] for k in keep}
+    payload["cn0"] = [r(sum(c) / len(c), 1) if c else None
+                      for c in ([s.cn0_dbhz for s in w.epoch.tracked] for w in run.rows)]
+    payload["checks"] = [[c[:3] for c in row] for row in full["checks"]]
+    return payload
+
+
+def navigator_content(cfg: GuardConfig, content: dict, chart: dict) -> dict:
+    return {
+        "states": content["states"],
+        "palette": content["palette"],
+        "actions": {state: {k: a[k] for k in ("autopilot_mode", "recommended_speed_kn",
+                                               "crew_instructions")}
+                    for state, a in content["actions"].items()},
+        "checks": [{"name": c["name"], "if_fails": CHECK_EXPLANATIONS[c["name"]]["if_fails"]}
+                   for c in content["checks"]],
+        "scenarios": content["scenarios"],
+        "coast_lat_short": content["coast_lat_short"],
+        "route_grid": chart["route"],
+    }
+
+
 def main() -> None:
     cfg = GuardConfig()
     comparison = {"voyage": [], "short": []}
@@ -210,10 +242,12 @@ def main() -> None:
             comparison[mode].append(comparison_row(run))
             write_js(WEB_DATA / "scenarios" / f"{mode}_{key}.js",
                      f'MARINE.registerScenario("{mode}/{key}", "{packed(scenario_payload(run))}");')
+            write_js(NAV_DATA / "scenarios" / f"{mode}_{key}.js",
+                     f'NAV.registerScenario("{mode}/{key}", "{packed(navigator_scenario(run))}");')
             print(f"exported {mode}/{key}")
             if voyage and key == "normal":
-                write_js(WEB_DATA / "chart.js",
-                         f'MARINE.registerChart("{packed(chart_payload(run))}");')
+                chart = chart_payload(run)
+                write_js(WEB_DATA / "chart.js", f'MARINE.registerChart("{packed(chart)}");')
 
     content = content_payload(cfg, run_scenario(DERIVATION_EXAMPLE[0], voyage=True))
     content["comparison"] = comparison
@@ -221,7 +255,9 @@ def main() -> None:
     content["coast_lat_short"] = run_scenario("normal").frame.to_latlon(0.0, cfg.coast_y)[0]
     write_js(WEB_DATA / "content.js",
              "MARINE.content = " + json.dumps(content, ensure_ascii=False, indent=1) + ";")
-    print(f"wrote {WEB_DATA}")
+    write_js(NAV_DATA / "content.js",
+             f'NAV.registerContent("{packed(navigator_content(cfg, content, chart))}");')
+    print(f"wrote {WEB_DATA} and {NAV_DATA}")
 
 
 if __name__ == "__main__":

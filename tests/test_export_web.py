@@ -44,3 +44,19 @@ def test_content_has_every_state_and_check(run):
     assert content["derivations"] and content["simple"] and content["briefing"]
     assert all(b["svg"].startswith("<svg") for d in content["derivations"]
                for b in d["blocks"] if b["type"] == "diagram")
+
+
+def test_bridge_view_payload_is_self_contained(run):
+    r = run("jamming")
+    payload = unpack(export_web.packed(export_web.navigator_scenario(r)))
+    n = len(r.rows)
+    for column in ("state", "lat", "lon", "unc", "heading", "speed", "nsat", "cn0", "agc", "checks"):
+        assert len(payload[column]) == n, column
+    assert payload["cn0"][200] is None  # jammed: no satellites tracked
+    assert all(len(check) == 3 for check in payload["checks"][0])
+    content = export_web.content_payload(GuardConfig(), run("normal"))
+    content["coast_lat_short"] = 60.0
+    chart = {"route": {"depth": [[0]]}}
+    nav = export_web.navigator_content(GuardConfig(), content, chart)
+    assert set(nav["actions"]) == {s.value for s in State}
+    assert len(nav["checks"]) == 10 and all(c["if_fails"] for c in nav["checks"])

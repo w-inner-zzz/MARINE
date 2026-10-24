@@ -243,5 +243,5 @@ MARINE.maps = (function () {
     Plotly.react(id, traces, layout, PLOT_CONFIG);
   }
 
-  return { routeMap, closeupMap, overviewMap, chartBackground, circle, bounds };
+  return { routeMap, closeupMap, overviewMap };
 })();
