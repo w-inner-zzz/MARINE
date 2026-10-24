@@ -109,11 +109,12 @@ class DeadReckoner:
         self.current_east += gain * (gnss[0] - self.x) / seconds_since_anchor
         self.current_north += gain * (gnss[1] - self.y) / seconds_since_anchor
 
-    def radar_fix(self, range_to_coast_m: float) -> bool:
-        """The coast runs east-west at coast_y, so the radar range gives our
-        north coordinate. Returns True if the fix was accepted."""
+    def radar_fix(self, range_to_coast_m: float, coast_y: float) -> bool:
+        """The radar measures the range straight north to the coast, which
+        lies at coast_y: that gives our north coordinate. Returns True if the
+        fix was accepted."""
         cfg = self._cfg
-        measured_y = cfg.coast_y - range_to_coast_m
+        measured_y = coast_y - range_to_coast_m
         if abs(measured_y - self.y) >= cfg.radar_gate_k * self.sigma_y + cfg.radar_gate_floor_m:
             return False
         new_y, self.sigma_y = fuse(self.y, self.sigma_y, measured_y, cfg.radar_sigma)

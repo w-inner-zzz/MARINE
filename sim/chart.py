@@ -13,3 +13,6 @@ class SyntheticChart:
 
     def is_water(self, x: float, y: float) -> bool:
         return y < self.coast_y
+
+    def coast_y_at(self, x: float, y: float) -> float:
+        return self.coast_y

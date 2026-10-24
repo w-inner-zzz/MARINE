@@ -9,6 +9,13 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class GuardConfig:
+    # --- Where local metres are anchored on the globe ---------------------
+    origin_lat_deg: float = 59.75
+    """Latitude of local (0, 0): mid Gulf of Finland (degrees north)."""
+
+    origin_lon_deg: float = 24.30
+    """Longitude of local (0, 0) (degrees east)."""
+
     # --- GNSS receiver -------------------------------------------------
     gnss_noise: float = 2.0
     """Typical GNSS position noise per axis in open sky (m)."""
@@ -95,7 +102,8 @@ class GuardConfig:
     """Radar range accuracy (m)."""
 
     coast_y: float = 3000.0
-    """The coast is a straight east-west line at this north coordinate (m)."""
+    """Fallback coast: a straight east-west line at this north coordinate (m),
+    used only when the chart cannot tell where the coast north of us is."""
 
     radar_gate_k: float = 3.0
     """A radar fix is accepted only within this many sigmas ..."""

@@ -25,7 +25,13 @@ BACKUP_STATES = HARD_STATES | {State.RECOVERING}
 
 
 class Chart(Protocol):
-    """Anything that can answer depth and water questions about a position."""
+    """Anything that can answer depth and water questions about a position
+    in local metres.
+
+    A chart may also offer coast_y_at(x, y) -> Optional[float]: the north
+    coordinate of the first coast straight north of (x, y). The radar fix
+    uses it; without it the guard assumes a straight coast at config.coast_y.
+    """
 
     def depth_at(self, x: float, y: float) -> float: ...
 
@@ -103,6 +109,11 @@ class Action:
     lookout_level: str
     crew_instructions: Tuple[str, ...]
     alerts: Tuple[str, ...]
+    why_it_matters: str = ""
+    steps: Tuple[str, ...] = ()
+    """Ordered checklist for the bridge team."""
+    rules: Tuple[str, ...] = ()
+    """Short references to the rules that still apply."""
 
     def to_dict(self) -> dict:
         return {
@@ -112,6 +123,9 @@ class Action:
             "lookout_level": self.lookout_level,
             "crew_instructions": list(self.crew_instructions),
             "alerts": list(self.alerts),
+            "why_it_matters": self.why_it_matters,
+            "steps": list(self.steps),
+            "rules": list(self.rules),
         }
 
 
@@ -132,6 +146,17 @@ class GuardResult:
     clean_needed: int = 0
     fixes: Tuple[str, ...] = field(default_factory=tuple)
     """Backup fixes applied this second: "radar" and/or "depth"."""
+    lat_deg: Optional[float] = None
+    lon_deg: Optional[float] = None
+    """Output position as latitude/longitude."""
+    gnss_position: Optional[Position] = None
+    gnss_lat_deg: Optional[float] = None
+    gnss_lon_deg: Optional[float] = None
+    """What the receiver reported, in local metres and latitude/longitude."""
+    baseline_cn0_dbhz: Optional[float] = None
+    baseline_agc_db: Optional[float] = None
+    baseline_clock_s: Optional[float] = None
+    """The learned 'normal' this second was compared with."""
 
     def to_dict(self) -> dict:
         return {
@@ -148,4 +173,12 @@ class GuardResult:
             "clean_seconds": self.clean_seconds,
             "clean_needed": self.clean_needed,
             "fixes": list(self.fixes),
+            "lat_deg": self.lat_deg,
+            "lon_deg": self.lon_deg,
+            "gnss_position": None if self.gnss_position is None else list(self.gnss_position),
+            "gnss_lat_deg": self.gnss_lat_deg,
+            "gnss_lon_deg": self.gnss_lon_deg,
+            "baseline_cn0_dbhz": self.baseline_cn0_dbhz,
+            "baseline_agc_db": self.baseline_agc_db,
+            "baseline_clock_s": self.baseline_clock_s,
         }

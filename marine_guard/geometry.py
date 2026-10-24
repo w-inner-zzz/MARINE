@@ -1,11 +1,12 @@
-"""Satellite geometry: horizontal dilution of precision (HDOP).
+"""Geometry: satellite HDOP and the local metres <-> latitude/longitude frame.
 
 HDOP says how much the satellite geometry magnifies range errors into
 horizontal position error. Under 2 is good, over 5 is poor.
 """
 
 import math
-from typing import Iterable, List, Optional, Sequence
+from dataclasses import dataclass
+from typing import Iterable, List, Optional, Sequence, Tuple
 
 from .types import SatInfo
 
@@ -59,3 +60,35 @@ def hdop(satellites: Iterable[SatInfo]) -> Optional[float]:
     if variance <= 0.0:
         return None
     return math.sqrt(variance)
+
+
+# ------------------------------------------------------- local lat/lon frame
+
+EARTH_RADIUS_M = 6371000.0
+
+
+@dataclass(frozen=True)
+class LocalFrame:
+    """Converts local metres (x east, y north) around a reference point to
+    latitude/longitude and back.
+
+    This is a flat-Earth (equirectangular) approximation around the reference
+    point: fine for tens of kilometres, increasingly wrong over hundreds.
+    """
+
+    lat0_deg: float
+    lon0_deg: float
+
+    @property
+    def _metres_per_rad_lon(self) -> float:
+        return EARTH_RADIUS_M * math.cos(math.radians(self.lat0_deg))
+
+    def to_latlon(self, x: float, y: float) -> Tuple[float, float]:
+        lat = self.lat0_deg + math.degrees(y / EARTH_RADIUS_M)
+        lon = self.lon0_deg + math.degrees(x / self._metres_per_rad_lon)
+        return lat, lon
+
+    def to_xy(self, lat: float, lon: float) -> Tuple[float, float]:
+        x = math.radians(lon - self.lon0_deg) * self._metres_per_rad_lon
+        y = math.radians(lat - self.lat0_deg) * EARTH_RADIUS_M
+        return x, y

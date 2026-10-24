@@ -8,6 +8,7 @@ from . import checks as chk
 from .actions import ACTIONS
 from .backup import DeadReckoner
 from .config import GuardConfig
+from .geometry import LocalFrame
 from .geometry import hdop as compute_hdop
 from .types import (BACKUP_STATES, HARD_STATES, Chart, CheckResult, GnssEpoch,
                     GuardResult, Position, ShipSensors, State)
@@ -20,6 +21,7 @@ class GnssGuard:
                  config: Optional[GuardConfig] = None):
         self.config = config or GuardConfig()
         self.chart = chart
+        self.frame = LocalFrame(self.config.origin_lat_deg, self.config.origin_lon_deg)
         self.state = State.TRUSTED
         self._dr: Optional[DeadReckoner] = None
         self._baselines: Optional[chk.Baselines] = None
@@ -62,6 +64,10 @@ class GnssGuard:
 
         # 4. Output and side effects of the new state.
         position, uncertainty, fixes = self._apply_state(epoch, sensors, ctx)
+        lat, lon = self.frame.to_latlon(*position)
+        gnss_lat = gnss_lon = None
+        if epoch.position is not None:
+            gnss_lat, gnss_lon = self.frame.to_latlon(*epoch.position)
 
         return GuardResult(
             timestamp=now,
@@ -77,6 +83,14 @@ class GnssGuard:
             clean_seconds=self._clean_streak,
             clean_needed=self._clean_needed,
             fixes=fixes,
+            lat_deg=lat,
+            lon_deg=lon,
+            gnss_position=epoch.position,
+            gnss_lat_deg=gnss_lat,
+            gnss_lon_deg=gnss_lon,
+            baseline_cn0_dbhz=ctx.baselines.cn0_dbhz,
+            baseline_agc_db=ctx.baselines.agc_db,
+            baseline_clock_s=ctx.baselines.clock_s,
         )
 
     # ------------------------------------------------------------ internals
@@ -161,14 +175,21 @@ class GnssGuard:
         fixes = []
         if cfg.use_radar_fixes and now - self._last_radar_time >= cfg.radar_every_s:
             self._last_radar_time = now
-            if (sensors.radar_range_to_coast_m is not None
-                    and self._dr.radar_fix(sensors.radar_range_to_coast_m)):
+            coast_y = self._coast_y_north_of_estimate()
+            if (sensors.radar_range_to_coast_m is not None and coast_y is not None
+                    and self._dr.radar_fix(sensors.radar_range_to_coast_m, coast_y)):
                 fixes.append("radar")
         if cfg.use_depth_fixes and now - self._last_depth_time >= cfg.depth_every_s:
             self._last_depth_time = now
             if self.chart is not None and self._dr.depth_fix(self.chart):
                 fixes.append("depth")
         return tuple(fixes)
+
+    def _coast_y_north_of_estimate(self) -> Optional[float]:
+        coast_y_at = getattr(self.chart, "coast_y_at", None)
+        if coast_y_at is None:
+            return self.config.coast_y
+        return coast_y_at(self._dr.x, self._dr.y)
 
     def _reason(self, verdict: str, results: Tuple[CheckResult, ...],
                 ctx: chk.CheckContext, became_trusted: bool) -> str:

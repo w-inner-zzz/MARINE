@@ -122,8 +122,12 @@ class World:
             heading_deg=self.true_heading_deg + COMPASS_BIAS_DEG + noise(0, COMPASS_NOISE_DEG),
             speed_through_water_mps=SHIP_SPEED_MPS + noise(0, SPEED_LOG_NOISE_MPS),
             depth_m=self.chart.depth_at(*self.true_position) + noise(0, DEPTH_NOISE_M),
-            radar_range_to_coast_m=self.chart.coast_y - self.true_y + noise(0, RADAR_NOISE_M),
+            radar_range_to_coast_m=self._radar_range(noise(0, RADAR_NOISE_M)),
         )
+
+    def _radar_range(self, noise_m: float) -> Optional[float]:
+        coast_y = self.chart.coast_y_at(*self.true_position)
+        return None if coast_y is None else coast_y - self.true_y + noise_m
 
     # -------------------------------------------------------------- GNSS
 
