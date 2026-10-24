@@ -39,7 +39,11 @@ MARINE.content = {
   "depth_min_reach_m": 30.0,
   "depth_max_reach_m": 400.0,
   "depth_max_cost": 3.0,
-  "depth_fix_sigma": 20.0
+  "depth_fix_sigma": 20.0,
+  "use_aux_fixes": true,
+  "aux_gate_k": 3.0,
+  "aux_gate_floor_m": 40.0,
+  "max_pseudolite_hdop": 5.0
  },
  "palette": {
   "states": {

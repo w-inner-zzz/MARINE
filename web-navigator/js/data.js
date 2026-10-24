@@ -57,10 +57,10 @@ NAV.getContent = async function () {
   return this.content;
 };
 
-NAV.getScenario = async function (mode, key) {
-  const id = `${mode}/${key}`;
+NAV.getScenario = async function (mode, key, solution) {
+  const id = `${mode}/${key}/${solution}`;
   if (!this.scenarios[id]) {
-    if (!this.raw[id]) await this.loadScript(`data/scenarios/${mode}_${key}.js`);
+    if (!this.raw[id]) await this.loadScript(`data/scenarios/${mode}_${key}_${solution}.js`);
     this.scenarios[id] = await this.unpack(this.raw[id]);
     delete this.raw[id];
   }

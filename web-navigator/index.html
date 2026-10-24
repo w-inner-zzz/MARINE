@@ -17,6 +17,8 @@
       </select>
       <label for="scenario">Scenario</label>
       <select id="scenario" autocomplete="off"></select>
+      <label for="solution">Solution</label>
+      <select id="solution" autocomplete="off"></select>
       <label for="speed">Playback</label>
       <select id="speed" autocomplete="off"></select>
       <button id="play" type="button">▷ Play</button>
@@ -50,10 +52,17 @@
         <div id="checks" class="checks"></div>
       </section>
 
-      <section class="panel map-panel">
-        <div class="map-head"><h2>Live map</h2><span id="map-legend" class="map-legend"></span></div>
-        <div id="map" class="map"></div>
-      </section>
+      <div class="bottom">
+        <section class="panel map-panel">
+          <div class="map-head"><h2>Live map</h2><span id="map-legend" class="map-legend"></span></div>
+          <div id="map" class="map"></div>
+        </section>
+        <section class="panel signal-panel">
+          <div class="map-head"><h2>GPS signal</h2><span id="signal-status" class="signal-badge"></span></div>
+          <div id="signal" class="map"></div>
+          <div id="signal-legend" class="map-legend"></div>
+        </section>
+      </div>
 
     </main>
   </div>

@@ -13,6 +13,7 @@ import base64
 import gzip
 import json
 import pathlib
+import shutil
 from dataclasses import asdict
 
 import numpy as np
@@ -21,7 +22,8 @@ from marine_guard import ACTIONS, GuardConfig, State
 from sim.analysis import detections, first_danger, path_errors
 from sim.runner import Run, run_scenario, summarize
 from sim.scenarios import SCENARIOS, VOYAGE_SCENARIOS
-from sim.world import TRACKING_THRESHOLD_DBHZ
+from sim.solutions import PEERS, PSEUDOLITE_SITES, SOLUTIONS
+from sim.world import SATELLITE_COUNT, TRACKING_THRESHOLD_DBHZ
 from teaching.briefing import briefing_blocks, further_reading
 from teaching.captions import CAPTIONS, SECTION_TEXT
 from teaching.decision_text import DISCLAIMER, PLAYBOOK_SOURCES, RULE_SOURCES, STATE_MEANING
@@ -205,21 +207,46 @@ def content_payload(cfg: GuardConfig, example: Run) -> dict:
 # ------------------------------------------------------- bridge view
 
 
+def _signal(row) -> list:
+    """C/N0 per satellite id 1..12 (None if not received)."""
+    by_id = {s.id: r(s.cn0_dbhz, 1) for s in row.epoch.satellites}
+    return [by_id.get(i) for i in range(1, SATELLITE_COUNT + 1)]
+
+
+def _bitmask(indices) -> int:
+    return sum(1 << i for i in indices)
+
+
 def navigator_scenario(run: Run) -> dict:
-    """Only what the bridge view shows: status, vitals, checks and the map."""
+    """Only what the bridge view shows: status, vitals, checks, the signal
+    graph, the map and the chosen navigation aid."""
     full = scenario_payload(run)
-    keep = ("meta", "state", "lat", "lon", "unc", "heading", "speed", "nsat", "agc",
-            "clean", "need", "glat", "glon")
+    keep = ("meta", "state", "verdict", "lat", "lon", "unc", "heading", "speed", "nsat", "agc",
+            "clean", "need", "glat", "glon", "tlat", "tlon", "gerr")
     payload = {k: full[k] for k in keep}
+    payload["meta"]["solution"] = run.solution
     payload["cn0"] = [r(sum(c) / len(c), 1) if c else None
                       for c in ([s.cn0_dbhz for s in w.epoch.tracked] for w in run.rows)]
     payload["checks"] = [[c[:3] for c in row] for row in full["checks"]]
+    payload["sig"] = [_signal(w) for w in run.rows]
+    payload["trk"] = [_bitmask(s.id - 1 for s in w.epoch.tracked) for w in run.rows]
+    payload["aid_used"] = [len(w.result.aux_used) for w in run.rows]
+    payload["aid_offered"] = [len(w.aid.fixes) if w.aid else 0 for w in run.rows]
+    if run.solution == "pseudolites":
+        payload["stations"] = [_bitmask(w.aid.stations_heard) for w in run.rows]
+    if run.solution == "peers":
+        frame = run.frame
+        payload["peers"] = [[[r(v, 6) for v in frame.to_latlon(x, y)] + [int(in_range)]
+                             for x, y, in_range in w.aid.peers] for w in run.rows]
+        payload["peers_used"] = [_bitmask(int(s.split(":")[1]) for s in w.result.aux_used)
+                                 for w in run.rows]
     return payload
 
 
 def navigator_content(cfg: GuardConfig, content: dict, chart: dict) -> dict:
     return {
         "states": content["states"],
+        "verdicts": content["verdicts"],
         "palette": content["palette"],
         "actions": {state: {k: a[k] for k in ("autopilot_mode", "recommended_speed_kn",
                                                "crew_instructions")}
@@ -229,11 +256,15 @@ def navigator_content(cfg: GuardConfig, content: dict, chart: dict) -> dict:
         "scenarios": content["scenarios"],
         "coast_lat_short": content["coast_lat_short"],
         "route_grid": chart["route"],
+        "solutions": [{"key": k, "title": t} for k, t in SOLUTIONS.items()],
+        "stations": [{"name": n, "lat": lat, "lon": lon} for n, lat, lon in PSEUDOLITE_SITES],
+        "peers": [p[0] for p in PEERS],
     }
 
 
 def main() -> None:
     cfg = GuardConfig()
+    shutil.rmtree(NAV_DATA / "scenarios", ignore_errors=True)  # drop files of old layouts
     comparison = {"voyage": [], "short": []}
     for mode, voyage, scenarios in (("voyage", True, VOYAGE_SCENARIOS),
                                     ("short", False, SCENARIOS)):
@@ -242,8 +273,12 @@ def main() -> None:
             comparison[mode].append(comparison_row(run))
             write_js(WEB_DATA / "scenarios" / f"{mode}_{key}.js",
                      f'MARINE.registerScenario("{mode}/{key}", "{packed(scenario_payload(run))}");')
-            write_js(NAV_DATA / "scenarios" / f"{mode}_{key}.js",
-                     f'NAV.registerScenario("{mode}/{key}", "{packed(navigator_scenario(run))}");')
+            for solution in SOLUTIONS:
+                aided = run if solution == "none" else run_scenario(key, voyage=voyage,
+                                                                    solution=solution)
+                write_js(NAV_DATA / "scenarios" / f"{mode}_{key}_{solution}.js",
+                         f'NAV.registerScenario("{mode}/{key}/{solution}", '
+                         f'"{packed(navigator_scenario(aided))}");')
             print(f"exported {mode}/{key}")
             if voyage and key == "normal":
                 chart = chart_payload(run)

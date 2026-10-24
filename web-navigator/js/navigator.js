@@ -1,4 +1,5 @@
-// Bridge view: status, instructions, vital readings, checks and map at a glance.
+// Bridge view: status, instructions, vital readings, checks, map and GPS signal at a
+// glance, with a choice of navigation aid (none, pseudolites, nearby ships).
 // Uses only files inside web-navigator/ (data/ is written by export_web.py).
 "use strict";
 
@@ -15,6 +16,22 @@
     short: [[1, "1× real time"], [5, "5×"], [10, "10×"], [30, "30×"]],
   };
   const HARD = ["LOST", "JAMMING", "SPOOFING"];
+  const SIGNAL_WINDOW_S = 300;
+
+  // Plain-language status of the received GPS signal, from the raw verdict.
+  const SIGNAL_STATUS = {
+    OK: ["NORMAL", "#008300"],
+    DEGRADED: ["NOISY", "#eda100"],
+    LOST: ["WEAK", "#e34948"],
+    JAMMING: ["WEAK", "#e34948"],
+    SPOOFING: ["TAMPERED", "#6250d6"],
+  };
+
+  // Extra instruction while the chosen aid is navigating for us.
+  const AID_INSTRUCTION = {
+    pseudolites: "Position from shore stations (pseudolites)",
+    peers: "Position from nearby ships: unverified, cross-check radar",
+  };
 
   // One short line per state, shown under the big status word.
   const STATE_LINE = {
@@ -40,8 +57,8 @@
     "Position agreement": ["Agreement", "m", "max", 1],
   };
 
-  const view = { mode: "voyage", key: "normal", t: 0, S: null, chart: null, timer: null,
-                 transitions: [], mapView: "ship", pending: false };
+  const view = { mode: "voyage", key: "normal", solution: "none", t: 0, S: null, timer: null,
+                 transitions: [], mapView: "ship", showTruth: false, pending: false };
 
   const stateAt = (t) => C().states[view.S.state[t]];
 
@@ -51,6 +68,12 @@
     const s = Math.round(seconds);
     const pad = (n) => String(n).padStart(2, "0");
     return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
+  }
+
+  function bits(mask) {
+    let n = 0;
+    for (let m = mask; m; m &= m - 1) n++;
+    return n;
   }
 
   function confidence(uncertaintyM) {
@@ -75,15 +98,32 @@
       `font-size:0.85rem;color:var(--muted)">±${S.unc[t].toFixed(0)} m</small>`;
     const cn0 = S.cn0[t];
     const vitals = [
-      ["Position", NAV.fmtLatLon(S.lat[t], S.lon[t])],
+      ["Position", NAV.fmtLatLon(S.lat[t], S.lon[t]), true],
       ["Heading", `${((S.heading[t] % 360) + 360) % 360 | 0}°`],
       ["Speed", `${(S.speed[t] / KNOT_MPS).toFixed(1)} kn`],
       ["Satellites", `${S.nsat[t]}`],
       ["Signal", cn0 === null ? "none" : `${cn0.toFixed(0)} dB-Hz`],
       ["Noise", `${S.agc[t].toFixed(1)} dB`],
+      ["Aid", aidStatus(S, t)],
     ];
-    $("vitals").innerHTML = vitals.map(([k, v]) =>
-      `<div class="vital"><span>${k}</span><b>${NAV.escape(v)}</b></div>`).join("");
+    $("vitals").innerHTML = vitals.map(([k, v, wide]) =>
+      `<div class="vital${wide ? " wide" : ""}"><span>${k}</span><b>${NAV.escape(v)}</b></div>`).join("");
+  }
+
+  // e.g. "6 stations · in use", "2/4 ships used", "Off".
+  function aidStatus(S, t) {
+    const solution = S.meta.solution;
+    if (solution === "none") return "Off";
+    const inUse = S.aid_used[t] > 0;
+    const standby = stateAt(t) === "TRUSTED" || stateAt(t) === "DEGRADED";
+    if (solution === "pseudolites") {
+      const heard = bits(S.stations[t]);
+      if (!S.aid_offered[t]) return `${heard} stations · no fix`;
+      return `${heard} stations · ${inUse ? "in use" : standby ? "standby" : "rejected"}`;
+    }
+    const inRadar = S.peers[t].filter((p) => p[2]).length;
+    if (standby) return `${inRadar} ships · standby`;
+    return `${bits(S.peers_used[t])}/${inRadar} ships used`;
   }
 
   function computeTransitions(S) {
@@ -96,7 +136,10 @@
 
   function instructionLines(state) {
     const a = C().actions[state];
-    return [a.autopilot_mode, `Speed: ${a.recommended_speed_kn}`, a.crew_instructions[0]];
+    const lines = [a.autopilot_mode, `Speed: ${a.recommended_speed_kn}`, a.crew_instructions[0]];
+    const aid = AID_INSTRUCTION[view.solution];
+    if (aid && state !== "TRUSTED" && state !== "DEGRADED") lines.push(aid);
+    return lines;
   }
 
   function renderInstructions(t) {
@@ -196,10 +239,13 @@
       for (let i = 0; i <= t; i += 30) {
         pts.push([S.lat[i], S.lon[i]]);
         if (stateAt(i) !== "TRUSTED" && S.glat[i] !== null) pts.push([S.glat[i], S.glon[i]]);
+        if (view.showTruth) pts.push([S.tlat[i], S.tlon[i]]);
       }
+      if (S.peers) S.peers[t].forEach(([plat, plon]) => pts.push([plat, plon]));
       return bounds(pts, 0.01, 0.02, 2.2);
     }
-    const halfM = 3000;
+    let halfM = S.meta.solution === "peers" ? 9000 : 3000;  // keep nearby ships in view
+    if (view.showTruth) halfM = Math.max(halfM, 1.4 * S.gerr[t]);  // keep the true ship in view
     const dLat = halfM / 111195, dLon = dLat / Math.cos(lat * Math.PI / 180);
     return [[lat - dLat * 0.45, lat + dLat * 0.45], [lon - dLon, lon + dLon]];
   }
@@ -220,6 +266,10 @@
       { type: "scatter", mode: "lines", x: gnss.x, y: gnss.y, line: { color: pal().red_path, width: 2, dash: "dot" } },
       { type: "scatter", mode: "lines", x: ring.x, y: ring.y, fill: "toself", hoverinfo: "skip",
         line: { color, width: 1 }, fillcolor: "rgba(0,0,0,0.08)" },
+    );
+    traces.push(...aidTraces(S, t));
+    if (view.showTruth) traces.push(...truthTraces(S, start, t));
+    traces.push(
       { type: "scatter", mode: "markers", x: [S.lon[t]], y: [S.lat[t]], hoverinfo: "skip",
         marker: { symbol: "arrow", size: 30, angle: S.heading[t], color, line: { width: 2, color: "white" } } },
     );
@@ -237,13 +287,140 @@
     Plotly.react("map", traces, layout, { responsive: true, displaylogo: false });
   }
 
+  // Shore stations (with ranging lines to the ones heard) or nearby ships at
+  // their broadcast positions (green = used, red = rejected, grey = out of radar).
+  function aidTraces(S, t) {
+    const solution = S.meta.solution;
+    const lat = S.lat[t], lon = S.lon[t];
+    if (solution === "pseudolites") {
+      const heard = C().stations.map((_, i) => !!(S.stations[t] & (1 << i)));
+      const inUse = S.aid_used[t] > 0;
+      const lines = { x: [], y: [] };
+      C().stations.forEach((st, i) => {
+        if (heard[i]) { lines.x.push(lon, st.lon, null); lines.y.push(lat, st.lat, null); }
+      });
+      return [
+        { type: "scatter", mode: "lines", x: lines.x, y: lines.y, hoverinfo: "skip",
+          line: { color: inUse ? "#1b4f72" : "#8a8986", width: 1, dash: "dot" } },
+        { type: "scatter", mode: "markers+text", x: C().stations.map((s) => s.lon),
+          y: C().stations.map((s) => s.lat), text: C().stations.map((s) => s.name),
+          textposition: "top center", textfont: { size: 11 }, hoverinfo: "text",
+          marker: { symbol: "triangle-up", size: 13, line: { width: 2, color: "#1b4f72" },
+                    color: heard.map((h) => (h ? "#1b4f72" : "#ffffff")) } },
+      ];
+    }
+    if (solution === "peers") {
+      const peers = S.peers[t];
+      const colour = peers.map(([, , inRadar], i) =>
+        !inRadar ? "#8a8986" : S.peers_used[t] & (1 << i) ? "#008300" : "#e34948");
+      const lines = { x: [], y: [] };
+      peers.forEach(([plat, plon, inRadar]) => {
+        if (inRadar) { lines.x.push(lon, plon, null); lines.y.push(lat, plat, null); }
+      });
+      return [
+        { type: "scatter", mode: "lines", x: lines.x, y: lines.y, hoverinfo: "skip",
+          line: { color: "#8a8986", width: 1, dash: "dot" } },
+        { type: "scatter", mode: "markers+text", x: peers.map((p) => p[1]), y: peers.map((p) => p[0]),
+          text: C().peers, textposition: "top center", textfont: { size: 11 }, hoverinfo: "text",
+          marker: { symbol: "circle", size: 13, color: colour, line: { width: 2, color: "white" } } },
+      ];
+    }
+    return [];
+  }
+
+  // Simulation only: where the ship really is (a real crew cannot see this).
+  function truthTraces(S, start, t) {
+    const truth = segment(S, start, t, "tlat", "tlon", () => true);
+    const err = S.gerr[t];
+    const label = err >= 1000 ? `${(err / 1000).toFixed(1)} km` : `${err.toFixed(0)} m`;
+    return [
+      { type: "scatter", mode: "lines", x: truth.x, y: truth.y, hoverinfo: "skip",
+        line: { color: "#111111", width: 2, dash: "dot" } },
+      { type: "scatter", mode: "markers+text", x: [S.tlon[t]], y: [S.tlat[t]], hoverinfo: "skip",
+        text: [`true position · off by ${label}`], textposition: "bottom center",
+        textfont: { size: 12, color: "#111111" },
+        marker: { symbol: "arrow", size: 26, angle: S.heading[t], color: "rgba(255,255,255,0.6)",
+                  line: { width: 2, color: "#111111" } } },
+    ];
+  }
+
+  // ---------------------------------------------------------- GPS signal
+
+  function signalClass(S, i) {
+    const verdict = C().verdicts[S.verdict[i]];
+    if (S.sig[i].every((v) => v === null)) return ["NO SIGNAL", "#e34948"];
+    return SIGNAL_STATUS[verdict];
+  }
+
+  function renderSignal(S, t) {
+    const start = Math.max(0, t - SIGNAL_WINDOW_S);
+    const idx = [];
+    for (let i = start; i <= t; i++) idx.push(i);
+    const ago = idx.map((i) => i - t);
+    const traces = [];
+    for (let k = 0; k < S.sig[0].length; k++) {
+      traces.push({ type: "scatter", mode: "lines", x: ago, y: idx.map((i) => S.sig[i][k]),
+        line: { width: 1, color: "#2a78d6" }, opacity: 0.35, hoverinfo: "skip" });
+    }
+    traces.push({ type: "scatter", mode: "lines", x: ago, y: idx.map((i) => S.cn0[i]),
+      line: { width: 3, color: "#1d2733" }, hovertemplate: "%{y:.0f} dB-Hz<extra></extra>" });
+
+    // Shade the stretches where the signal was not normal.
+    const shapes = [
+      { type: "rect", xref: "paper", x0: 0, x1: 1, y0: 35, y1: 50, fillcolor: "rgba(0,131,0,0.10)",
+        line: { width: 0 }, layer: "below" },
+      { type: "line", xref: "paper", x0: 0, x1: 1, y0: 28, y1: 28, line: { color: "#8a8986", dash: "dash", width: 1 } },
+    ];
+    let runStart = 0;
+    for (let j = 1; j <= idx.length; j++) {
+      const label = signalClass(S, idx[runStart])[0];
+      if (j < idx.length && signalClass(S, idx[j])[0] === label) continue;
+      if (label !== "NORMAL") {
+        shapes.push({ type: "rect", yref: "paper", y0: 0, y1: 1, x0: ago[runStart] - 0.5,
+          x1: ago[j - 1] + 0.5, fillcolor: signalClass(S, idx[runStart])[1], opacity: 0.18,
+          line: { width: 0 }, layer: "below" });
+      }
+      runStart = j;
+    }
+    Plotly.react("signal", traces, {
+      height: 380, margin: { l: 45, r: 10, t: 10, b: 40 }, showlegend: false,
+      paper_bgcolor: "#ffffff", plot_bgcolor: "#ffffff", shapes,
+      xaxis: { range: [-SIGNAL_WINDOW_S, 0], title: { text: "seconds ago" } },
+      yaxis: { range: [0, 60], title: { text: "signal strength (dB-Hz)" } },
+    }, { responsive: true, displaylogo: false });
+
+    const [label, colour] = signalClass(S, t);
+    $("signal-status").textContent = label;
+    $("signal-status").style.background = colour;
+  }
+
+  function renderSignalLegend() {
+    const swatch = (colour, label) =>
+      `<i style="background:${colour};height:0.8rem;opacity:0.6"></i>${label}`;
+    $("signal-legend").innerHTML =
+      `<i style="background:#1d2733"></i>average <i style="background:#2a78d6;opacity:0.5"></i>each satellite` +
+      `<br>${swatch("#008300", "normal range")}${swatch("#eda100", "noisy")}` +
+      `${swatch("#e34948", "weak / lost")}${swatch("#6250d6", "tampered")}`;
+  }
+
   function renderMapLegend() {
     const item = (color, label, dotted) =>
       `<i style="background:${dotted ? "none" : color};border-top:${dotted ? `3px dotted ${color}` : "none"}"></i>${label}`;
+    const dot = (color, label, shape) =>
+      `<span style="color:${color};margin-left:0.8rem">${shape}</span> ${label}`;
+    const aid = view.solution === "pseudolites" ? dot("#1b4f72", "shore station", "▲")
+      : view.solution === "peers" ? dot("#008300", "ship used", "●") + dot("#e34948", "ship rejected", "●")
+      : "";
     $("map-legend").innerHTML =
       item(pal().ship_track, "GNSS track") + item(pal().green_path, "backup track") +
-      item(pal().red_path, "GNSS reported (rejected)", true) +
-      ` <button id="map-view" type="button" style="margin-left:1rem">${view.mapView === "ship" ? "Show whole route" : "Follow ship"}</button>`;
+      item(pal().red_path, "GNSS reported (rejected)", true) + aid +
+      ` <button id="map-view" type="button" style="margin-left:1rem">${view.mapView === "ship" ? "Show whole route" : "Follow ship"}</button>` +
+      ` <label style="margin-left:0.6rem"><input id="show-truth" type="checkbox"${view.showTruth ? " checked" : ""}>` +
+      ` show true position (simulation)</label>`;
+    $("show-truth").addEventListener("change", () => {
+      view.showTruth = $("show-truth").checked;
+      render();
+    });
     $("map-view").addEventListener("click", () => {
       view.mapView = view.mapView === "ship" ? "route" : "ship";
       renderMapLegend();
@@ -262,6 +439,7 @@
     renderInstructions(t);
     renderChecks(S, t);
     renderMap(S, t);
+    renderSignal(S, t);
   }
 
   function requestRender() {
@@ -295,15 +473,18 @@
     $("scenario").innerHTML = C().scenarios[view.mode]
       .map((s) => `<option value="${s.key}">${NAV.escape(s.title)}</option>`).join("");
     $("scenario").value = view.key;
+    $("solution").innerHTML = C().solutions
+      .map((s) => `<option value="${s.key}">${NAV.escape(s.title)}</option>`).join("");
+    $("solution").value = view.solution;
     $("speed").innerHTML = SPEEDS[view.mode].map(([v, label]) => `<option value="${v}">${label}</option>`).join("");
     $("speed").selectedIndex = 1;
   }
 
-  async function load() {
+  async function load(keepTime) {
     stop();
     $("loading").hidden = false;
     try {
-      view.S = await NAV.getScenario(view.mode, view.key);
+      view.S = await NAV.getScenario(view.mode, view.key, view.solution);
     } catch (err) {
       $("loading").hidden = true;
       NAV.fail(err.message);
@@ -312,7 +493,8 @@
     $("loading").hidden = true;
     view.transitions = computeTransitions(view.S);
     $("time").max = view.S.state.length - 1;
-    setTime(0);
+    renderMapLegend();
+    setTime(keepTime ? view.t : 0);
   }
 
   async function start() {
@@ -328,12 +510,14 @@
     }
     view.mode = $("mode").value;  // the browser may restore the last selection on reload
     fillControls();
-    renderMapLegend();
+    renderSignalLegend();
     $("mode").addEventListener("change", () => {
       view.mode = $("mode").value; view.key = $("scenario").value || "normal";
       fillControls(); load();
     });
     $("scenario").addEventListener("change", () => { view.key = $("scenario").value; load(); });
+    // Same moment, different solution: easy to compare.
+    $("solution").addEventListener("change", () => { view.solution = $("solution").value; load(true); });
     $("play").addEventListener("click", togglePlay);
     $("time").addEventListener("input", () => { stop(); setTime(Number($("time").value)); });
     await load();

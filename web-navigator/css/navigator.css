@@ -82,6 +82,11 @@ h2 { font-size: 1rem; margin: 0 0 0.6rem; text-transform: uppercase; letter-spac
 .map-legend { font-size: 0.85rem; color: var(--muted); }
 .map-legend i { display: inline-block; width: 1.2rem; height: 3px; vertical-align: middle; margin: 0 0.3rem 0 0.8rem; }
 .map { height: 380px; }
+.bottom { display: grid; grid-template-columns: 3fr 2fr; gap: 0.9rem; }
+.signal-badge { color: #fff; font-weight: 800; letter-spacing: 0.05em; border-radius: 6px;
+                padding: 0.15rem 0.6rem; }
+.vitals { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.vital.wide { grid-column: span 2; }
 
 .loading { color: var(--muted); margin: 0; }
 .error { background: #fde8e8; color: #8a1c1c; border: 2px solid var(--bad); border-radius: 10px;
@@ -92,7 +97,7 @@ h2 { font-size: 1rem; margin: 0 0 0.6rem; text-transform: uppercase; letter-spac
   .sidebar { flex-direction: row; flex-wrap: wrap; align-items: end; gap: 0.5rem 1rem; }
   .sidebar > * { flex: 1 1 140px; }
   .brand { flex-basis: 100%; margin: 0; }
-  .top, .checks { grid-template-columns: 1fr; }
+  .top, .checks, .bottom { grid-template-columns: 1fr; }
   .checks { grid-auto-flow: row; grid-template-rows: none; }
   main { padding: 0.8rem; }
   .confidence { position: static; text-align: right; }
