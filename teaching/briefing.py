@@ -1,12 +1,14 @@
 """'Why the Baltic Sea?' briefing. Cautious wording; every claim is linked."""
 
-import streamlit as st
+from typing import List, Tuple
 
+from .blocks import Blocks
 from .sources import SOURCES, link
 
 
-def render_briefing() -> None:
-    st.markdown(
+def briefing_blocks() -> Blocks:
+    out = Blocks()
+    out.md(
         f"""
 **GNSS** (Global Navigation Satellite System: GPS, Galileo, GLONASS, BeiDou) is how
 almost every ship knows where it is. In the Baltic Sea, that signal is often disturbed.
@@ -45,5 +47,9 @@ side of a shoal or into a traffic lane going the other way.
 navigating safely. It does not say who causes them.*
 """
     )
-    with st.expander("Further reading"):
-        st.markdown("\n".join(f"- [{title}]({url})" for title, url in SOURCES.values()))
+    return out
+
+
+def further_reading() -> List[Tuple[str, str]]:
+    """(title, url) of every source, for a 'further reading' list."""
+    return list(SOURCES.values())

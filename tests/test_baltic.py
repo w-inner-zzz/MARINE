@@ -11,7 +11,7 @@ from sim.analysis import first_danger, path_errors
 from sim.bathymetry import parse_ascii_grid
 from sim.baltic import baltic_chart
 from sim.runner import run_scenario
-from ui.explanations import CHECK_EXPLANATIONS, explain
+from teaching.explanations import CHECK_EXPLANATIONS, explain
 
 GULF_OF_FINLAND = (59.75, 24.30)
 HELSINKI_CENTRE = (60.1699, 24.9384)

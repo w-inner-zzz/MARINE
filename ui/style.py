@@ -41,9 +41,9 @@ AREA_LABELS = (
 )
 
 
-def how_to_read(text: str) -> None:
+def how_to_read(text: str, where=st) -> None:
     """One-line plain-language reading guide under a chart or number."""
-    st.caption(f"**How to read this:** {text}")
+    where.caption(f"**How to read this:** {text}")
 
 
 def fmt_latlon(lat: float, lon: float) -> str:

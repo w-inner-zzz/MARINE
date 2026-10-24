@@ -9,6 +9,8 @@ import streamlit as st
 from sim.runner import Row, Run
 from sim.world import TRACKING_THRESHOLD_DBHZ
 
+from teaching.captions import CAPTIONS
+
 from .style import ACCENT, HEALTHY, MUTED, fmt_latlon, how_to_read
 
 NORMAL_CN0_BAND = (35.0, 50.0)
@@ -36,8 +38,7 @@ def satellite_table(row: Row) -> None:
           "Tracked": "yes" if s.tracked else "no"} for s in sats],
         hide_index=True, width="stretch", height=250,
     )
-    how_to_read("Azimuth is the compass direction to the satellite, elevation its height "
-                "above the horizon (90° = straight up). 'Tracked' means the receiver uses it.")
+    how_to_read(CAPTIONS["satellite_table"])
 
 
 def sky_plot(row: Row, normal: Optional[Row]) -> go.Figure:
@@ -97,39 +98,34 @@ def numbers(row: Row, normal: Optional[Row]) -> None:
     c1.metric("Noise floor", f"{epoch.agc_db:.1f} dB",
               delta=f"{rise:+.1f} dB vs learned normal {res.baseline_agc_db:.1f}",
               delta_color="inverse")
-    c1.caption("**How to read this:** the background radio hiss. A jump of more than "
-               "3 dB above the learned normal means someone is transmitting noise.")
+    how_to_read(CAPTIONS["noise_floor"], c1)
 
     count = res.satellite_count
     verdict = "enough" if count >= 5 else ("position only, no cross-check" if count >= 4
                                            else "no position")
     c2.metric("Satellites tracked", count, delta=f"need 4 for a fix, 5 to check: {verdict}",
               delta_color="off")
-    c2.caption("**How to read this:** 4 unknowns (east, north, up, clock) need 4 "
-               "satellites; the 5th lets us test that they agree.")
+    how_to_read(CAPTIONS["satellite_count"], c2)
 
     hdop = res.hdop
     hdop_text = "none" if hdop is None or not math.isfinite(hdop) else f"{hdop:.1f}"
     quality = ("-" if hdop_text == "none" else "good" if hdop < 2 else
                "poor" if hdop > 5 else "fair")
     c3.metric("HDOP", hdop_text, delta=quality, delta_color="off")
-    c3.caption("**How to read this:** how much the satellite layout magnifies errors. "
-               "Under 2 is good (spread around the sky), over 5 poor.")
+    how_to_read(CAPTIONS["hdop"], c3)
 
     clock = epoch.gnss_time_error_s
     c4.metric("GNSS time error", "-" if clock is None else f"{clock * 1000:.1f} ms",
               delta=None if clock is None else
               f"{(clock - res.baseline_clock_s) * 1000:+.1f} ms vs normal", delta_color="off")
-    c4.caption("**How to read this:** the receiver's clock offset. It should stay steady; "
-               "a sudden jump of 100 ms or more is suspicious.")
+    how_to_read(CAPTIONS["time_error"], c4)
 
     if res.gnss_lat_deg is None:
         c5.metric("GNSS position", "none")
     else:
         c5.metric("GNSS position", f"{res.gnss_lat_deg:.4f}° N",
                   delta=f"{res.gnss_lon_deg:.4f}° E", delta_color="off")
-    c5.caption("**How to read this:** what the receiver says (latitude north, longitude "
-               "east). Not yet checked: it may be wrong.")
+    how_to_read(CAPTIONS["gnss_position"], c5)
 
     if normal is not None:
         st.caption(f"Healthy receiver at the same second: noise floor "
@@ -244,14 +240,10 @@ def render_inspector(run: Run, normal_run: Optional[Run], t: int) -> None:
     c1, c2 = st.columns(2)
     with c1:
         st.plotly_chart(sky_plot(row, normal), width="stretch")
-        how_to_read("Each dot is a satellite seen from the ship: the centre is straight up, "
-                    "the edge the horizon. Real satellites are spread around the sky; fakes "
-                    "from one transmitter all sit in one direction.")
+        how_to_read(CAPTIONS["sky"])
     with c2:
         st.plotly_chart(cn0_bars(row, normal), width="stretch")
-        how_to_read("C/N0 is how loud each satellite is compared with the background noise. "
-                    "Healthy satellites sit in the green band and differ from each other; "
-                    "below the dashed line the receiver loses them.")
+        how_to_read(CAPTIONS["cn0_bars"])
 
     satellite_table(row)
     numbers(row, normal)
@@ -262,16 +254,11 @@ def render_inspector(run: Run, normal_run: Optional[Run], t: int) -> None:
     h1, h2 = st.columns(2)
     with h1:
         st.plotly_chart(cn0_history(rows, normal_rows), width="stretch")
-        how_to_read("Thin lines are single satellites, the thick line their average. A "
-                    "sudden drop of every line together means jamming; lines bunching "
-                    "together at a high level means spoofing.")
+        how_to_read(CAPTIONS["cn0_history"])
         st.plotly_chart(count_history(rows, normal_rows), width="stretch")
-        how_to_read("Below the green line (5) the position can no longer be cross-checked; "
-                    "below 4 there is no position at all.")
+        how_to_read(CAPTIONS["count_history"])
     with h2:
         st.plotly_chart(noise_history(rows, normal_rows), width="stretch")
-        how_to_read("If the blue line crosses the red dashed line, the noise is more than "
-                    "3 dB above normal: the first sign of jamming.")
+        how_to_read(CAPTIONS["noise_history"])
         st.plotly_chart(jump_history(rows, normal_rows), width="stretch")
-        how_to_read("At 12 knots the ship moves about 6 m each second, so the line should "
-                    "stay near the dotted speed line. Spikes are position jumps.")
+        how_to_read(CAPTIONS["jump_history"])

@@ -14,13 +14,12 @@ from marine_guard import GuardConfig
 from sim.analysis import Danger, Detection, detections, downsample, first_danger, path_errors
 from sim.runner import Run, run_scenario, summarize
 from sim.scenarios import SCENARIOS, VOYAGE_SCENARIOS
-from ui.briefing import render_briefing
+from teaching.captions import CAPTIONS, SECTION_TEXT
 from ui.decision import render_checks, render_decision
-from ui.derivations import render_derivations
 from ui.inspector import render_inspector
 from ui.maps import closeup_map, overview_map, route_map
 from ui.playbook import render_playbook
-from ui.simple import render_simple
+from ui.teaching_views import render_briefing, render_derivations, render_simple
 from ui.style import EVENT_SHADE, GREEN_PATH, RED_PATH, STATE_COLORS, TRUTH, how_to_read
 
 MODES = {"Baltic voyage (3 hours)": True, "Short test run (15 minutes)": False}
@@ -187,8 +186,7 @@ def monitor_tab(key: str, voyage: bool, step: int, compare: bool) -> None:
                 "and what the boat should do.", unsafe_allow_html=True)
 
     st.header("1. What the receiver reports (the input)")
-    st.markdown("Before deciding anything, look at the raw input: which satellites are "
-                "heard, how loud, from where, and what position the receiver claims.")
+    st.markdown(SECTION_TEXT["input"])
     normal_run = load_run("normal", voyage) if compare and key != "normal" else None
     render_inspector(run, normal_run, t)
 
@@ -202,40 +200,28 @@ def monitor_tab(key: str, voyage: bool, step: int, compare: bool) -> None:
     render_playbook(res)
 
     st.header("5. Where the ship is")
-    st.markdown("**Red**: what GNSS reported while it could not be trusted (the path a "
-                "GNSS-following autopilot would believe). **Green**: the guard's backup "
-                "track, navigating without GNSS. **Grey dotted**: the real track, which only "
-                "a simulation can know. While GNSS is trusted only the blue ship track is "
-                "drawn.")
+    st.markdown(SECTION_TEXT["map"])
     st.plotly_chart(route_map(run, t, events, danger, every=10 if voyage else 2),
                     width="stretch")
     if danger is not None and danger.t <= row.t:
         st.error(f"⚠ Grounding risk if GNSS had been trusted: at t = {danger.t:.0f} s the "
                  f"reported (red) position was {danger.what}, while the real ship was "
                  f"{danger.off_by_m / 1000:.1f} km away in open water.")
-    how_to_read("Latitude runs up, longitude across; both axes are scaled so 1 km looks "
-                "the same either way. Stars mark the moments the guard raised an alarm, with "
-                "the check that decided. A red ✕ marks where trusting GNSS would have led "
-                "towards land or shallow water.")
+    how_to_read(CAPTIONS["route_map"])
     left, right = st.columns(2)
     with left:
         st.plotly_chart(closeup_map(run, t, events, danger), width="stretch")
-        how_to_read("The green circle is the guard's uncertainty: the ship should be "
-                    "somewhere inside it. It grows on dead reckoning and shrinks with each "
-                    "radar (▼) or depth (◆) fix.")
+        how_to_read(CAPTIONS["closeup_map"])
     with right:
         if voyage:
             st.plotly_chart(overview_map(run, t), width="stretch")
-            how_to_read("The whole Baltic. The blue line is this voyage in the Gulf of "
-                        "Finland.")
+            how_to_read(CAPTIONS["overview_map"])
         else:
             st.info("The Baltic overview is shown in Baltic voyage mode.")
 
     st.header("6. How well did it do?")
     st.plotly_chart(error_chart(key, voyage, run, row.t), width="stretch")
-    how_to_read("Distance between the reported position and the real one, on a log scale "
-                "(each grid line is 10 times more). The guard (green) should stay low while "
-                "the naive receiver (red) runs away during the event.")
+    how_to_read(CAPTIONS["error_chart"])
     if st.button("Compare all scenarios (simulates each once)"):
         st.session_state.show_comparison = True
     if st.session_state.get("show_comparison"):

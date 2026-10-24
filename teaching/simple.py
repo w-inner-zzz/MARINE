@@ -1,13 +1,14 @@
 """'Simple' tab: the whole system in plain language, one worked example per idea."""
 
-import streamlit as st
-
 from marine_guard import GuardConfig
 
+from .blocks import Blocks
 
-def render_simple(cfg: GuardConfig) -> None:
+
+def simple_blocks(cfg: GuardConfig) -> Blocks:
+    out = Blocks()
     growth = cfg.drift_per_speed * 6.17 + cfg.drift_floor
-    st.markdown(
+    out.md(
         f"""
 ### 1. What is GNSS?
 **GNSS** (Global Navigation Satellite System) is the family of satellite systems that tell
@@ -94,3 +95,4 @@ radar says the coast is 34,180 m ahead to the north. So we are 34,190 − 34,180
 north of the reference point, whatever the satellites claim.
 """
     )
+    return out

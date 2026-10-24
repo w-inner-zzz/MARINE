@@ -5,28 +5,15 @@ from typing import Optional
 
 import streamlit as st
 
-from marine_guard import CheckResult, GuardResult, State
+from marine_guard import CheckResult, GuardResult
 
-from .explanations import explain
+from teaching.captions import SECTION_TEXT
+from teaching.decision_text import deciding_check, what_is_happening, why
+from teaching.explanations import explain
+
 from .style import STATE_COLORS
 
 STATUS = {True: ("✅", "passed"), False: ("❌", "failed"), None: ("➖", "skipped")}
-
-STATE_MEANING = {
-    State.TRUSTED: "the satellite position can be used.",
-    State.DEGRADED: "GNSS is noisier than normal, so it is blended with dead reckoning.",
-    State.RECOVERING: "signals look clean again, but GNSS must stay clean for a while "
-                      "before it is trusted.",
-    State.LOST: "too few satellites: the ship navigates without GNSS.",
-    State.JAMMING: "someone is drowning the satellite signals in noise: the ship "
-                   "navigates without GNSS.",
-    State.SPOOFING: "the satellite position is fake: the ship ignores GNSS completely.",
-}
-
-
-def deciding_check(res: GuardResult) -> Optional[CheckResult]:
-    return next((c for c in res.checks if c.passed is False), None)
-
 
 def _number(v: Optional[float]) -> str:
     if v is None:
@@ -58,34 +45,9 @@ def _card(check: CheckResult, index: int, deciding: bool, color: str) -> str:
 def render_checks(res: GuardResult) -> None:
     deciding = deciding_check(res)
     color = STATE_COLORS[res.state]
-    st.markdown(
-        "The guard runs ten checks every second, top to bottom. All are evaluated, but the "
-        "**first one that fails decides** the verdict, so the order matters: the most "
-        "certain signs (noise, missing satellites) come first.")
+    st.markdown(SECTION_TEXT["checks"])
     cards = [_card(c, i + 1, c is deciding, color) for i, c in enumerate(res.checks)]
     st.markdown("".join(cards), unsafe_allow_html=True)
-
-
-def what_is_happening(res: GuardResult) -> str:
-    a = res.action
-    base = f"{res.state.value}: {STATE_MEANING[res.state]}"
-    if res.state == State.TRUSTED:
-        return f"{base} Autopilot: {a.autopilot_mode}."
-    if res.state == State.RECOVERING:
-        return (f"{base} Clean for {res.clean_seconds} of {res.clean_needed} seconds; "
-                f"position from {a.position_source}.")
-    return f"{base} Position from {a.position_source}; autopilot {a.autopilot_mode}."
-
-
-def why(res: GuardResult) -> str:
-    failed = [c for c in res.checks if c.passed is False]
-    skipped = sum(c.passed is None for c in res.checks)
-    skipped_text = f" ({skipped} could not run)" if skipped else ""
-    if not failed:
-        return f"All checks that could run passed{skipped_text}. {res.reason}"
-    names = ", ".join(c.name for c in failed)
-    return (f"{len(failed)} of {len(res.checks)} checks failed ({names}){skipped_text}. "
-            f"The first failure decides: {res.reason}")
 
 
 def render_decision(res: GuardResult) -> None:

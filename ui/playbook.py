@@ -4,14 +4,10 @@ import streamlit as st
 
 from marine_guard import GuardResult, State
 
-from .sources import link
+from teaching.decision_text import DISCLAIMER, PLAYBOOK_SOURCES, RULE_SOURCES
+from teaching.sources import link
+
 from .style import STATE_COLORS
-
-DISCLAIMER = ("Educational summary, not legal advice or an official procedure. Follow your "
-              "company safety management system and the instructions of the flag state and "
-              "coastal authority.")
-
-RULE_SOURCES = {"COLREG": "colreg", "SOLAS": "solas_v"}
 
 
 def _rule_with_link(rule: str) -> str:
@@ -43,10 +39,6 @@ def render_playbook(res: GuardResult) -> None:
         with st.container(border=True):
             st.markdown("**Rules that still apply when GNSS fails**\n\n"
                         + "\n".join(f"- {_rule_with_link(r)}" for r in a.rules))
-        st.markdown(
-            "**Sources for the steps:** "
-            f"{link('sma', 'Swedish Maritime Administration (as reported)')}; "
-            f"{link('imo5037', 'IMO Circular Letter No. 5037 (Estonia and Finland)')}; "
-            f"{link('fi_ee_warning', 'Finnish-Estonian warning')}; "
-            f"{link('traficom_boating', 'Traficom advice for boaters')}.")
+        st.markdown("**Sources for the steps:** "
+                    + "; ".join(link(key, text) for key, text in PLAYBOOK_SOURCES) + ".")
     st.info(DISCLAIMER)
