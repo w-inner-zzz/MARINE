@@ -114,3 +114,18 @@ def land_raster() -> np.ndarray:
 def baltic_chart(lat0_deg: float, lon0_deg: float) -> BalticChart:
     land = land_raster()
     return BalticChart(LocalFrame(lat0_deg, lon0_deg), land, load_depth_grid(land))
+
+
+OVERVIEW_BOUNDS = (53.5, 66.0, 9.0, 31.0)  # lat_min, lat_max, lon_min, lon_max
+OVERVIEW_STEP_DEG = 0.05
+
+
+@lru_cache(maxsize=1)
+def overview_land() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Coarse land mask of the whole Baltic for the overview map:
+    (latitudes, longitudes, land[lat, lon])."""
+    lat_min, lat_max, lon_min, lon_max = OVERVIEW_BOUNDS
+    lats = np.arange(lat_min, lat_max, OVERVIEW_STEP_DEG)
+    lons = np.arange(lon_min, lon_max, OVERVIEW_STEP_DEG)
+    lon_grid, lat_grid = np.meshgrid(lons, lats)
+    return lats, lons, globe.is_land(lat_grid, lon_grid)
