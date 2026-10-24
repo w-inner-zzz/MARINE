@@ -11,26 +11,33 @@ peers - four nearby ships tracked by radar (range and bearing) that broadcast
     when we are jammed they broadcast drifting dead-reckoned positions, when we
     are spoofed they broadcast the same fake positions, and can lead us the
     wrong way. The fourth is further away, outside the attack area.
+seabed - seabed signature matching: the last minute of depth soundings,
+    placed along the track from the ship's own compass and log, is slid
+    east/west and north/south over the chart until it fits best. Uses only
+    on-board sensors and the stored chart, so no attack in our scenarios
+    affects it; it fails where the seabed is flat.
 """
 
 import math
+from collections import deque
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from marine_guard import AuxFix, GuardConfig
-from marine_guard.aids import peer_fix, pseudolite_fix
+from marine_guard import AuxFix, GuardConfig, GuardResult, ShipSensors, State
+from marine_guard.aids import peer_fix, pseudolite_fix, seabed_fix
 from marine_guard.geometry import LocalFrame
 
 from .scenarios import Scenario
-from .world import (COMPASS_BIAS_DEG, JAMMING_AGC_RISE_DB, SMART_SPOOF_DRAG_MPS,
-                    TRACKING_THRESHOLD_DBHZ, World)
+from .world import (COMPASS_BIAS_DEG, JAMMING_AGC_RISE_DB,
+                    SMART_SPOOF_DRAG_MPS, TRACKING_THRESHOLD_DBHZ, World)
 
 SOLUTIONS = {
     "none": "None (guard only)",
     "pseudolites": "Pseudolites",
     "peers": "Nearby ships",
+    "seabed": "Seabed signature",
 }
 
 # --- Pseudolites ---------------------------------------------------------
@@ -67,6 +74,16 @@ RADAR_BEARING_SIGMA_DEG = 0.5
 PEER_GNSS_NOISE_M = 2.0
 PEER_DR_DRIFT_MPS = 0.15        # how fast a jammed ship's own position drifts
 
+# --- Seabed signature ----------------------------------------------------------
+SEABED_WINDOW_S = 60            # soundings in one signature (one per second)
+SEABED_EVERY_S = 60             # one match per fresh window: overlapping windows
+                                # would give correlated fixes fused as independent
+SEABED_MAX_SIGMA_M = 50.0       # offered only if at least one axis is this sharp
+SEABED_MATCH_NOISE_M = 2.0      # sounder noise (1 m) plus track-shape and chart errors
+SEABED_MIN_SIGMA_M = 25.0       # half the 50 m coarse search step: finer is not resolved
+SEABED_MIN_RADIUS_M = 150.0     # search at least this far around the estimate ...
+SEABED_MAX_RADIUS_M = 1500.0    # ... and at most this far
+
 
 def _distance(a, b) -> float:
     return math.hypot(a[0] - b[0], a[1] - b[1])
@@ -81,6 +98,8 @@ class AidReport:
     """Pseudolites: indices of the stations heard."""
     peers: Tuple[Tuple[float, float, bool], ...] = ()
     """Nearby ships: (reported x, reported y, within radar range)."""
+    seabed_tried: bool = False
+    """Seabed: a match was attempted this second (fixes is empty if it failed)."""
 
 
 class PseudoliteNetwork:
@@ -91,7 +110,8 @@ class PseudoliteNetwork:
         self.clock_m = CLOCK_START_M
         self.last_fix: Optional[Tuple[float, float]] = None
 
-    def measure(self, world: World) -> AidReport:
+    def measure(self, world: World, sensors: ShipSensors,
+                estimate: Optional[GuardResult]) -> AidReport:
         self.clock_m += CLOCK_DRIFT_MPS + self.rng.normal(0, CLOCK_WALK_M)
         jam_db = JAMMING_AGC_RISE_DB if (world.scenario.kind == "jamming"
                                          and world.scenario.in_event(world.t)) else 0.0
@@ -149,7 +169,8 @@ class PeerFleet:
             return (x + noise[0], y + SMART_SPOOF_DRAG_MPS * (world.t - sc.event_start) + noise[1])
         return (x + noise[0], y + noise[1])
 
-    def measure(self, world: World) -> AidReport:
+    def measure(self, world: World, sensors: ShipSensors,
+                estimate: Optional[GuardResult]) -> AidReport:
         fixes, peers = [], []
         for i, (name, *_rest) in enumerate(PEERS):
             reported = self.reported_position(i, world)
@@ -167,17 +188,58 @@ class PeerFleet:
         return AidReport(fixes=tuple(fixes), peers=tuple(peers))
 
 
+class SeabedMatcher:
+    """Matches only while the guard is not trusting GNSS (otherwise there is
+    nothing to correct), searching around the guard's latest estimate."""
+
+    def __init__(self, world_chart):
+        # The sounder itself is accurate to about 1 m (sim.world.DEPTH_NOISE_M);
+        # the match allows SEABED_MATCH_NOISE_M for the other error sources.
+        self.chart = world_chart
+        self.east = self.north = 0.0  # own dead-reckoned track: shape only
+        self.soundings: deque = deque(maxlen=SEABED_WINDOW_S)
+        self.last_match_t = -math.inf
+
+    def measure(self, world: World, sensors: ShipSensors,
+                estimate: Optional[GuardResult]) -> AidReport:
+        heading = math.radians(sensors.heading_deg)
+        step = (sensors.speed_through_water_mps * math.sin(heading),
+                sensors.speed_through_water_mps * math.cos(heading))
+        self.east += step[0]
+        self.north += step[1]
+        if sensors.depth_m is not None:
+            self.soundings.append((self.east, self.north, sensors.depth_m))
+
+        on_backup = estimate is not None and estimate.state not in (State.TRUSTED, State.DEGRADED)
+        if (not on_backup or len(self.soundings) < SEABED_WINDOW_S
+                or world.t - self.last_match_t < SEABED_EVERY_S):
+            return AidReport(fixes=())
+        self.last_match_t = world.t
+        track = [(e - self.east, n - self.north) for e, n, _ in self.soundings]
+        depths = [d for _, _, d in self.soundings]
+        center = (estimate.position[0] + step[0], estimate.position[1] + step[1])
+        radius = min(max(3 * estimate.uncertainty_m + 50, SEABED_MIN_RADIUS_M), SEABED_MAX_RADIUS_M)
+        fix = seabed_fix(track, depths, self.chart.depth_at, center, radius,
+                         depth_noise_m=SEABED_MATCH_NOISE_M, min_sigma_m=SEABED_MIN_SIGMA_M)
+        if fix is not None and min(fix.sigma_m, fix.sigma_north) > SEABED_MAX_SIGMA_M:
+            fix = None
+        return AidReport(fixes=(fix,) if fix else (), seabed_tried=True)
+
+
 class NoAid:
-    def measure(self, world: World) -> AidReport:
+    def measure(self, world: World, sensors: ShipSensors,
+                estimate: Optional[GuardResult]) -> AidReport:
         return AidReport(fixes=())
 
 
 def make_aid(solution: str, scenario: Scenario, frame: LocalFrame, config: GuardConfig,
-             seed: int):
+             seed: int, chart=None):
     if solution == "pseudolites":
         return PseudoliteNetwork(frame, config, seed)
     if solution == "peers":
         return PeerFleet(scenario, seed)
+    if solution == "seabed":
+        return SeabedMatcher(chart)
     if solution == "none":
         return NoAid()
     raise ValueError(f"unknown solution {solution!r}; choose from {list(SOLUTIONS)}")

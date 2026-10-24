@@ -94,3 +94,68 @@ def test_crude_spoofed_neighbours_are_rejected_only_the_honest_one_is_used():
 
 def test_nearby_ships_help_when_only_our_receiver_fails(run):
     assert worst_event_error(run_with("lost_no_fixes", "peers")) < 30.0
+
+
+# ------------------------------------------------------------ seabed matching
+
+def _soundings(depth_at, truth, noise=None):
+    """60 one-second soundings along an east-bound track ending at truth."""
+    import random
+    rnd = random.Random(7)
+    track = [(-6.0 * k, -0.4 * k) for k in range(59, -1, -1)]
+    depths = [depth_at(truth[0] + tx, truth[1] + ty) + (rnd.gauss(0, noise) if noise else 0.0)
+              for tx, ty in track]
+    return track, depths
+
+
+def test_seabed_fix_finds_the_ship_on_a_varied_seabed():
+    from marine_guard.aids import seabed_fix
+
+    def depth_at(x, y):
+        return 50 + 10 * math.sin(x / 300) + 8 * math.cos(y / 250) + 4 * math.sin((x + y) / 180)
+
+    truth = (2000.0, 800.0)
+    track, depths = _soundings(depth_at, truth, noise=1.0)
+    fix = seabed_fix(track, depths, depth_at, (truth[0] + 120, truth[1] - 90), radius_m=400)
+    error = math.hypot(fix.position[0] - truth[0], fix.position[1] - truth[1])
+    assert error < 25.0
+    assert error < 3 * math.hypot(fix.sigma_m, fix.sigma_north)
+
+
+def test_seabed_fix_reports_no_information_along_a_featureless_axis():
+    from marine_guard.aids import seabed_fix
+
+    def depth_at(x, y):  # varies east-west only
+        return 50 + 10 * math.sin(x / 300)
+
+    truth = (2000.0, 800.0)
+    track, depths = _soundings(depth_at, truth)
+    fix = seabed_fix(track, depths, depth_at, (truth[0] + 60, truth[1] + 60), radius_m=300)
+    assert abs(fix.position[0] - truth[0]) < 15.0
+    assert math.isinf(fix.sigma_north)
+
+
+def test_seabed_fix_refuses_a_flat_seabed():
+    from marine_guard.aids import seabed_fix
+    track, depths = _soundings(lambda x, y: 42.0, (0.0, 0.0))
+    assert seabed_fix(track, depths, lambda x, y: 42.0, (0.0, 0.0), radius_m=300) is None
+
+
+def test_guard_leaves_an_axis_without_information_unchanged():
+    from marine_guard.backup import DeadReckoner
+    from marine_guard import GuardConfig
+    dr = DeadReckoner((0.0, 0.0), GuardConfig())
+    dr.sigma_x = dr.sigma_y = 40.0
+    assert dr.aux_fix((30.0, 500.0), 10.0, math.inf)
+    assert dr.x > 20.0 and dr.y == 0.0 and dr.sigma_y == 40.0
+
+
+def test_seabed_fixes_are_honest_on_the_baltic_voyage():
+    """Each offered fix is within 3 sigma of the truth on the axes it informs."""
+    voyage = run_scenario("lost", voyage=True, solution="seabed")
+    fixes = [(row, row.aid.fixes[0]) for row in voyage.rows if row.aid and row.aid.fixes]
+    assert fixes
+    for row, fix in fixes:
+        for axis, sigma in ((0, fix.sigma_m), (1, fix.sigma_north)):
+            if not math.isinf(sigma):
+                assert abs(fix.position[axis] - row.true_position[axis]) < 3 * sigma

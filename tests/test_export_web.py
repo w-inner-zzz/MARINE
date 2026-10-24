@@ -57,6 +57,6 @@ def test_bridge_view_payload_is_self_contained(run):
     content = export_web.content_payload(GuardConfig(), run("normal"))
     content["coast_lat_short"] = 60.0
     chart = {"route": {"depth": [[0]]}}
-    nav = export_web.navigator_content(GuardConfig(), content, chart)
+    nav = export_web.navigator_content(GuardConfig(), content, chart, {})
     assert set(nav["actions"]) == {s.value for s in State}
     assert len(nav["checks"]) == 10 and all(c["if_fails"] for c in nav["checks"])

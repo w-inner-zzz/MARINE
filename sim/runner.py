@@ -75,7 +75,8 @@ def run_scenario(key: str, seed: Optional[int] = None, config: Optional[GuardCon
     frame = LocalFrame(config.origin_lat_deg, config.origin_lon_deg)
     world = World(scenario, seed, chart)
     guard = GnssGuard(chart=chart, config=config)
-    aid = make_aid(solution, scenario, frame, config, seed)
+    aid = make_aid(solution, scenario, frame, config, seed, chart)
+    result = None
 
     rows: List[Row] = []
     naive: Point = world.true_position
@@ -83,7 +84,7 @@ def run_scenario(key: str, seed: Optional[int] = None, config: Optional[GuardCon
         if step > 0:
             world.advance()
         epoch, sensors = world.epoch(), world.sensors()
-        report = aid.measure(world)
+        report = aid.measure(world, sensors, result)
         result = guard.update(epoch, sensors, report.fixes)
         if epoch.position is not None:
             naive = epoch.position
