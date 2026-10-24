@@ -5,13 +5,16 @@ from dataclasses import dataclass, replace
 from typing import List, Optional, Tuple
 
 from marine_guard import GnssEpoch, GnssGuard, GuardConfig, GuardResult, ShipSensors, State
+from marine_guard.geometry import LocalFrame
 
-from .scenarios import SCENARIOS, Scenario
+from .chart import SyntheticChart
+from .scenarios import SCENARIOS, VOYAGE_SCENARIOS, Scenario
 from .world import World
 
 Point = Tuple[float, float]
 
 DEFAULT_SEED = 2
+VOYAGE_SEED = 8
 
 
 @dataclass(frozen=True)
@@ -28,6 +31,9 @@ class Row:
     result: GuardResult
     epoch: GnssEpoch
     sensors: ShipSensors
+    true_latlon: Point
+    gnss_latlon: Optional[Point]
+    guard_latlon: Point
 
 
 @dataclass(frozen=True)
@@ -35,19 +41,36 @@ class Run:
     scenario: Scenario
     rows: Tuple[Row, ...]
     config: GuardConfig
+    chart: object
+    voyage: bool
+
+    @property
+    def frame(self) -> LocalFrame:
+        return LocalFrame(self.config.origin_lat_deg, self.config.origin_lon_deg)
 
 
 def _distance(a: Point, b: Point) -> float:
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
 
-def run_scenario(key: str, seed: int = DEFAULT_SEED, config: Optional[GuardConfig] = None) -> Run:
-    scenario = SCENARIOS[key]
+def run_scenario(key: str, seed: Optional[int] = None, config: Optional[GuardConfig] = None,
+                 voyage: bool = False) -> Run:
+    """Short 900 s test run on the synthetic chart, or (voyage=True) a 3-hour
+    voyage in the Gulf of Finland starting at config.origin_lat/lon_deg."""
+    scenario = (VOYAGE_SCENARIOS if voyage else SCENARIOS)[key]
+    if seed is None:
+        seed = VOYAGE_SEED if voyage else DEFAULT_SEED
     config = replace(config or GuardConfig(),
                      use_radar_fixes=scenario.fixes_enabled,
                      use_depth_fixes=scenario.fixes_enabled)
-    world = World(scenario, seed)
-    guard = GnssGuard(chart=world.chart, config=config)
+    if voyage:
+        from .baltic import baltic_chart  # loads the land mask: only when needed
+        chart = baltic_chart(config.origin_lat_deg, config.origin_lon_deg)
+    else:
+        chart = SyntheticChart()
+    frame = LocalFrame(config.origin_lat_deg, config.origin_lon_deg)
+    world = World(scenario, seed, chart)
+    guard = GnssGuard(chart=chart, config=config)
 
     rows: List[Row] = []
     naive: Point = world.true_position
@@ -71,8 +94,12 @@ def run_scenario(key: str, seed: int = DEFAULT_SEED, config: Optional[GuardConfi
             result=result,
             epoch=epoch,
             sensors=sensors,
+            true_latlon=frame.to_latlon(*truth),
+            gnss_latlon=(None if epoch.position is None
+                         else (result.gnss_lat_deg, result.gnss_lon_deg)),
+            guard_latlon=(result.lat_deg, result.lon_deg),
         ))
-    return Run(scenario, tuple(rows), config)
+    return Run(scenario, tuple(rows), config, chart, voyage)
 
 
 @dataclass(frozen=True)

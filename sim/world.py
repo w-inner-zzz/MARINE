@@ -55,7 +55,6 @@ SPOOF_CN0_DBHZ = 52.0
 SPOOF_CN0_STD_DB = 0.6
 SPOOF_AZIMUTH_SPREAD_DEG = 3.0
 SPOOF_AGC_RISE_DB = 1.5
-SPOOF_OFFSET_M = (1500.0, 2000.0)
 SMART_SPOOF_DRAG_MPS = 1.2
 
 
@@ -74,9 +73,9 @@ class Satellite:
 class World:
     """One simulated run. Call advance() then epoch() and sensors() each second."""
 
-    def __init__(self, scenario: Scenario, seed: int):
+    def __init__(self, scenario: Scenario, seed: int, chart=None):
         self.scenario = scenario
-        self.chart = SyntheticChart()
+        self.chart = chart if chart is not None else SyntheticChart()
         self.rng = np.random.default_rng(seed)
         self.t = 0.0
         self.true_x = 0.0
@@ -212,7 +211,7 @@ class World:
             fake = Satellite(i + 1, azimuth, float(self._spoof_elevations[i]), True)
             readings.append((fake, self.rng.normal(SPOOF_CN0_DBHZ, SPOOF_CN0_STD_DB)))
         return self._make_epoch(readings, self._agc(SPOOF_AGC_RISE_DB), GNSS_NOISE_M,
-                                SPOOF_OFFSET_M)
+                                self.scenario.spoof_offset_m)
 
     def _smart_spoof_epoch(self) -> GnssEpoch:
         drag = SMART_SPOOF_DRAG_MPS * (self.t - self.scenario.event_start)
