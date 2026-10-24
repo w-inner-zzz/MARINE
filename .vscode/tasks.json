@@ -2,10 +2,10 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Serve website",
-      "detail": "Serve web/ at http://localhost:8000 (stop with the trash-can icon)",
+      "label": "Serve websites",
+      "detail": "Serve the project at http://localhost:8000 (/web/ and /web-navigator/); stop with the trash-can icon",
       "type": "shell",
-      "command": "python -m http.server 8000 --directory web",
+      "command": "python -m http.server 8000",
       "isBackground": true,
       "problemMatcher": {
         "pattern": { "regexp": "^__never_matches__$" },
@@ -14,7 +14,7 @@
     },
     {
       "label": "Export website data",
-      "detail": "Re-run every scenario with the Python guard and rewrite web/data/",
+      "detail": "Re-run every scenario with the Python guard and rewrite web/data/ (used by both websites)",
       "type": "shell",
       "command": "python export_web.py",
       "problemMatcher": []

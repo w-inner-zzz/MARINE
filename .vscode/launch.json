@@ -2,18 +2,32 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Open website (Chrome)",
+      "name": "Open bridge view (Chrome)",
       "type": "chrome",
       "request": "launch",
-      "url": "http://localhost:8000",
-      "preLaunchTask": "Serve website"
+      "url": "http://localhost:8000/web-navigator/",
+      "preLaunchTask": "Serve websites"
     },
     {
-      "name": "Open website (Edge)",
+      "name": "Open full teaching website (Chrome)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:8000/web/",
+      "preLaunchTask": "Serve websites"
+    },
+    {
+      "name": "Open bridge view (Edge)",
       "type": "msedge",
       "request": "launch",
-      "url": "http://localhost:8000",
-      "preLaunchTask": "Serve website"
+      "url": "http://localhost:8000/web-navigator/",
+      "preLaunchTask": "Serve websites"
+    },
+    {
+      "name": "Open full teaching website (Edge)",
+      "type": "msedge",
+      "request": "launch",
+      "url": "http://localhost:8000/web/",
+      "preLaunchTask": "Serve websites"
     }
   ]
 }
