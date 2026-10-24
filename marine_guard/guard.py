@@ -195,7 +195,8 @@ class GnssGuard:
     def _aux_fixes(self, aux_fixes: Sequence[AuxFix]) -> Tuple[str, ...]:
         if not self.config.use_aux_fixes:
             return ()
-        return tuple(f.source for f in aux_fixes if self._dr.aux_fix(f.position, f.sigma_m))
+        return tuple(f.source for f in aux_fixes
+                     if self._dr.aux_fix(f.position, f.sigma_m, f.sigma_north))
 
     def _coast_y_north_of_estimate(self) -> Optional[float]:
         coast_y_at = getattr(self.chart, "coast_y_at", None)

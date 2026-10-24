@@ -83,7 +83,14 @@ class AuxFix:
     """Short name, e.g. "pseudolite" or "peer:2"."""
     position: Position
     sigma_m: float
-    """Accuracy (one standard deviation per axis, m)."""
+    """Accuracy (one standard deviation, m): east-west, and also north-south
+    unless sigma_north_m is given. math.inf means no information on that axis."""
+    sigma_north_m: Optional[float] = None
+    """North-south accuracy when it differs from east-west (m)."""
+
+    @property
+    def sigma_north(self) -> float:
+        return self.sigma_m if self.sigma_north_m is None else self.sigma_north_m
 
 
 # ---------------------------------------------------------------- outputs

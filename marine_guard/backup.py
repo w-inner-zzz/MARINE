@@ -121,16 +121,17 @@ class DeadReckoner:
         self.move_by(0.0, new_y - self.y)
         return True
 
-    def aux_fix(self, position: Position, sigma_m: float) -> bool:
-        """Fuse an independent position fix if it is plausible. Returns True if
-        it was accepted."""
+    def aux_fix(self, position: Position, sigma_east_m: float, sigma_north_m: float) -> bool:
+        """Fuse an independent position fix if it is plausible on both axes.
+        Returns True if it was accepted. An axis with infinite sigma carries
+        no information: it always passes and is not changed."""
         cfg = self._cfg
-        gap = math.hypot(position[0] - self.x, position[1] - self.y)
-        limit = cfg.aux_gate_k * math.hypot(self.total_uncertainty, sigma_m) + cfg.aux_gate_floor_m
-        if gap >= limit:
-            return False
-        new_x, self.sigma_x = fuse(self.x, self.sigma_x, position[0], sigma_m)
-        new_y, self.sigma_y = fuse(self.y, self.sigma_y, position[1], sigma_m)
+        for gap, own, other in ((position[0] - self.x, self.sigma_x, sigma_east_m),
+                                (position[1] - self.y, self.sigma_y, sigma_north_m)):
+            if abs(gap) >= cfg.aux_gate_k * math.hypot(own, other) + cfg.aux_gate_floor_m:
+                return False
+        new_x, self.sigma_x = fuse(self.x, self.sigma_x, position[0], sigma_east_m)
+        new_y, self.sigma_y = fuse(self.y, self.sigma_y, position[1], sigma_north_m)
         self.move_by(new_x - self.x, new_y - self.y)
         return True
 
