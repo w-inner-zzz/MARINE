@@ -9,6 +9,7 @@ from marine_guard.geometry import LocalFrame
 
 from .chart import SyntheticChart
 from .scenarios import SCENARIOS, VOYAGE_SCENARIOS, Scenario
+from .solutions import AidReport, make_aid
 from .world import World
 
 Point = Tuple[float, float]
@@ -34,6 +35,8 @@ class Row:
     true_latlon: Point
     gnss_latlon: Optional[Point]
     guard_latlon: Point
+    aid: Optional[AidReport] = None
+    """What the chosen navigation aid offered this second (None without an aid)."""
 
 
 @dataclass(frozen=True)
@@ -43,6 +46,7 @@ class Run:
     config: GuardConfig
     chart: object
     voyage: bool
+    solution: str = "none"
 
     @property
     def frame(self) -> LocalFrame:
@@ -54,7 +58,7 @@ def _distance(a: Point, b: Point) -> float:
 
 
 def run_scenario(key: str, seed: Optional[int] = None, config: Optional[GuardConfig] = None,
-                 voyage: bool = False) -> Run:
+                 voyage: bool = False, solution: str = "none") -> Run:
     """Short 900 s test run on the synthetic chart, or (voyage=True) a 3-hour
     voyage in the Gulf of Finland starting at config.origin_lat/lon_deg."""
     scenario = (VOYAGE_SCENARIOS if voyage else SCENARIOS)[key]
@@ -71,6 +75,7 @@ def run_scenario(key: str, seed: Optional[int] = None, config: Optional[GuardCon
     frame = LocalFrame(config.origin_lat_deg, config.origin_lon_deg)
     world = World(scenario, seed, chart)
     guard = GnssGuard(chart=chart, config=config)
+    aid = make_aid(solution, scenario, frame, config, seed)
 
     rows: List[Row] = []
     naive: Point = world.true_position
@@ -78,7 +83,8 @@ def run_scenario(key: str, seed: Optional[int] = None, config: Optional[GuardCon
         if step > 0:
             world.advance()
         epoch, sensors = world.epoch(), world.sensors()
-        result = guard.update(epoch, sensors)
+        report = aid.measure(world)
+        result = guard.update(epoch, sensors, report.fixes)
         if epoch.position is not None:
             naive = epoch.position
         truth = world.true_position
@@ -98,8 +104,9 @@ def run_scenario(key: str, seed: Optional[int] = None, config: Optional[GuardCon
             gnss_latlon=(None if epoch.position is None
                          else (result.gnss_lat_deg, result.gnss_lon_deg)),
             guard_latlon=(result.lat_deg, result.lon_deg),
+            aid=None if solution == "none" else report,
         ))
-    return Run(scenario, tuple(rows), config, chart, voyage)
+    return Run(scenario, tuple(rows), config, chart, voyage, solution)
 
 
 @dataclass(frozen=True)
