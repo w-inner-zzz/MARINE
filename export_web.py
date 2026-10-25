@@ -233,16 +233,29 @@ def navigator_scenario(run: Run) -> dict:
     payload["trk"] = [_bitmask(s.id - 1 for s in w.epoch.tracked) for w in run.rows]
     payload["aid_used"] = [len(w.result.aux_used) for w in run.rows]
     payload["aid_offered"] = [len(w.aid.fixes) if w.aid else 0 for w in run.rows]
-    if run.solution == "pseudolites":
+    if run.solution in ("pseudolites", "auto"):
         payload["stations"] = [_bitmask(w.aid.stations_heard) for w in run.rows]
-    if run.solution == "peers":
+    if run.solution in ("peers", "auto"):
         frame = run.frame
         payload["peers"] = [[[r(v, 6) for v in frame.to_latlon(x, y)] + [int(in_range)]
                              for x, y, in_range in w.aid.peers] for w in run.rows]
-        payload["peers_used"] = [_bitmask(int(s.split(":")[1]) for s in w.result.aux_used)
-                                 for w in run.rows]
-    if run.solution == "seabed":
+        payload["peers_used"] = [_bitmask(int(s.split(":")[1]) for s in w.result.aux_used
+                                          if s.startswith("peer:")) for w in run.rows]
+    if run.solution in ("seabed", "auto"):
         payload["seabed"] = [_seabed_fix(run, w) for w in run.rows]
+    if run.solution == "auto":
+        # Which methods the selector chose each second, and why (as indexes
+        # into short lists, since they rarely change).
+        choices, reasons = [], []
+        payload["sel"], payload["why"] = [], []
+        for w in run.rows:
+            choice = "+".join(w.aid.selection.methods)
+            for value, table, column in ((choice, choices, "sel"),
+                                         (w.aid.selection.reason, reasons, "why")):
+                if value not in table:
+                    table.append(value)
+                payload[column].append(table.index(value))
+        payload["sel_names"], payload["why_texts"] = choices, reasons
     return payload
 
 
@@ -255,9 +268,10 @@ def _seabed_fix(run: Run, row) -> object:
     [lat, lon, sigma east, sigma north (None = no information), accepted]."""
     if not row.aid or not row.aid.seabed_tried:
         return None
-    if not row.aid.fixes:
+    offer = row.aid.seabed_offer if row.aid.selection else row.aid.fixes
+    if not offer:
         return 0
-    fix = row.aid.fixes[0]
+    fix = offer[0]
     lat, lon = run.frame.to_latlon(*fix.position)
     return [r(lat, 6), r(lon, 6), _finite(fix.sigma_m, 0), _finite(fix.sigma_north, 0),
             int("seabed" in row.result.aux_used)]

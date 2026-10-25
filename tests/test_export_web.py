@@ -60,3 +60,12 @@ def test_bridge_view_payload_is_self_contained(run):
     nav = export_web.navigator_content(GuardConfig(), content, chart, {})
     assert set(nav["actions"]) == {s.value for s in State}
     assert len(nav["checks"]) == 10 and all(c["if_fails"] for c in nav["checks"])
+
+
+def test_auto_payload_names_the_method_in_use_every_second():
+    r = export_web.run_scenario("smart_spoof", solution="auto")
+    payload = unpack(export_web.packed(export_web.navigator_scenario(r)))
+    assert len(payload["sel"]) == len(payload["why"]) == len(r.rows)
+    names = {payload["sel_names"][i] for i in payload["sel"]}
+    assert "gnss" in names and any(n.startswith("pseudolites") for n in names)
+    assert not any("peers" in n for n in names)

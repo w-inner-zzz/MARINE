@@ -16,6 +16,8 @@ seabed - seabed signature matching: the last minute of depth soundings,
     east/west and north/south over the chart until it fits best. Uses only
     on-board sensors and the stored chart, so no attack in our scenarios
     affects it; it fails where the seabed is flat.
+auto - runs all three and lets marine_guard.selector pick, from the problem
+    the guard has diagnosed, which ones to trust.
 """
 
 import math
@@ -27,6 +29,7 @@ import numpy as np
 
 from marine_guard import AuxFix, GuardConfig, GuardResult, ShipSensors, State
 from marine_guard.aids import peer_fix, pseudolite_fix, seabed_fix
+from marine_guard.selector import AidSelector, Selection
 from marine_guard.geometry import LocalFrame
 
 from .scenarios import Scenario
@@ -38,6 +41,7 @@ SOLUTIONS = {
     "pseudolites": "Pseudolites",
     "peers": "Nearby ships",
     "seabed": "Seabed signature",
+    "auto": "Auto (recommended)",
 }
 
 # --- Pseudolites ---------------------------------------------------------
@@ -100,6 +104,10 @@ class AidReport:
     """Nearby ships: (reported x, reported y, within radar range)."""
     seabed_tried: bool = False
     """Seabed: a match was attempted this second (fixes is empty if it failed)."""
+    seabed_offer: Tuple[AuxFix, ...] = ()
+    """Auto: the seabed fix offered this second, whether or not it was selected."""
+    selection: Optional[Selection] = None
+    """Auto: which methods the selector chose, and why."""
 
 
 class PseudoliteNetwork:
@@ -226,6 +234,33 @@ class SeabedMatcher:
         return AidReport(fixes=(fix,) if fix else (), seabed_tried=True)
 
 
+class AutoAid:
+    """Runs every aid and lets marine_guard.selector choose which to trust for
+    the problem the guard has diagnosed. Each aid keeps its own random numbers,
+    so its measurements are the same as when it runs alone."""
+
+    def __init__(self, scenario: Scenario, frame: LocalFrame, config: GuardConfig, seed: int,
+                 chart):
+        self.aids = {"pseudolites": PseudoliteNetwork(frame, config, seed),
+                     "peers": PeerFleet(scenario, seed),
+                     "seabed": SeabedMatcher(chart)}
+        self.selector = AidSelector()
+
+    def measure(self, world: World, sensors: ShipSensors,
+                estimate: Optional[GuardResult]) -> AidReport:
+        reports = {name: aid.measure(world, sensors, estimate) for name, aid in self.aids.items()}
+        state = estimate.state if estimate is not None else State.TRUSTED
+        accepted = estimate.aux_used if estimate is not None else ()
+        selection = self.selector.choose(world.t, state,
+                                         {name: r.fixes for name, r in reports.items()}, accepted)
+        return AidReport(fixes=selection.fixes,
+                         stations_heard=reports["pseudolites"].stations_heard,
+                         peers=reports["peers"].peers,
+                         seabed_tried=reports["seabed"].seabed_tried,
+                         seabed_offer=reports["seabed"].fixes,
+                         selection=selection)
+
+
 class NoAid:
     def measure(self, world: World, sensors: ShipSensors,
                 estimate: Optional[GuardResult]) -> AidReport:
@@ -240,6 +275,8 @@ def make_aid(solution: str, scenario: Scenario, frame: LocalFrame, config: Guard
         return PeerFleet(scenario, seed)
     if solution == "seabed":
         return SeabedMatcher(chart)
+    if solution == "auto":
+        return AutoAid(scenario, frame, config, seed, chart)
     if solution == "none":
         return NoAid()
     raise ValueError(f"unknown solution {solution!r}; choose from {list(SOLUTIONS)}")
