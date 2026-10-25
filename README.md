@@ -4,6 +4,10 @@ Install: `pip install -r requirements.txt` (optional, needs internet: `python -m
 Test: `pytest`
 Run the websites: open `web-navigator/index.html` (bridge view) or `web/index.html` (full teaching site) in a browser, or in VS Code use Run ▸ "Open bridge view" / "Open full teaching website" (or right-click either `index.html` ▸ "Open with Live Server"); after changing Python code run `python export_web.py`. Streamlit version: `streamlit run app.py`.
 
+## Public website (deploy)
+The public site is static: both websites plus a landing page, built into `dist/` by `python scripts/build_site.py` (standard library only; copies `site/`, `web-navigator/` → `/bridge/`, `web/` → `/learn/`; no Python source is published). All data is pre-computed by `python export_web.py` and committed, so the host only runs the copy step; the Streamlit app is not part of it. Preview exactly what will be published: `python scripts/build_site.py --serve` → http://localhost:8788 (applies `site/_headers`).
+Host: Cloudflare Pages, build command `python3 scripts/build_site.py`, output directory `dist`, environment variable `SKIP_DEPENDENCY_INSTALL=1`; no secrets are needed (see `.env.example`). Everything shown is simulated: not for navigation.
+
 ## How a problem is diagnosed
 Every second the 10 checks run in a fixed order and the first that fails decides the verdict, which then sets the ship's state ([`docs/diagnosis_flowchart.svg`](docs/diagnosis_flowchart.svg), PNG for slides alongside; regenerate with `python docs/flowchart.py`).
 

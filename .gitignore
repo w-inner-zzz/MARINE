@@ -5,3 +5,7 @@ __pycache__/
 venv/
 .streamlit/secrets.toml
 .DS_Store
+dist/
+.env
+.env.*
+!.env.example

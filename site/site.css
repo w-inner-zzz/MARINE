@@ -1,0 +1,31 @@
+/* Landing page: same colours as the bridge view. */
+:root { --bg: #f4f5f7; --panel: #ffffff; --ink: #15171a; --muted: #50545b; --border: #d9dce1;
+        --link: #0b57d0; --focus: #0b57d0; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+       font: 17px/1.5 "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+header, main, footer { max-width: 62rem; margin: 0 auto; padding: 0 1rem; }
+header { padding-top: 2.5rem; }
+h1 { font-size: clamp(1.8rem, 5vw, 2.6rem); margin: 0 0 0.6rem; }
+header p { font-size: 1.15rem; color: var(--muted); max-width: 46rem; }
+a { color: var(--link); }
+.cards { list-style: none; padding: 0; margin: 2rem 0; display: grid; gap: 1rem;
+         grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); }
+.cards li { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+            padding: 1.2rem 1.4rem; position: relative; }
+.cards li:hover { border-color: var(--link); }
+.cards h2 { margin: 0 0 0.4rem; font-size: 1.4rem; }
+.cards a { text-decoration: none; }
+.cards a::after { content: ""; position: absolute; inset: 0; }   /* whole card is the link */
+.cards p { margin: 0; color: var(--muted); }
+section h2 { font-size: 1.4rem; }
+figure { margin: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+         padding: 1rem; }
+figure img { width: 100%; height: auto; display: block; }
+figcaption { margin-top: 1rem; }
+footer { padding-top: 1.5rem; padding-bottom: 2.5rem; color: var(--muted); font-size: 0.95rem; }
+.skip-link { position: absolute; left: 0.5rem; top: -3rem; background: var(--ink); color: #fff;
+             padding: 0.5rem 0.9rem; border-radius: 6px; z-index: 10; }
+.skip-link:focus { top: 0.5rem; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+main:focus { outline: none; }

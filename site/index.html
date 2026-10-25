@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MARINE GNSS Guard</title>
+  <meta name="description" content="Simulated maritime GNSS trust monitor: detects jamming and spoofing in the Gulf of Finland and keeps navigating without satellites.">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to the content</a>
+  <header>
+    <h1>MARINE GNSS Guard</h1>
+    <p>Can the ship trust its satellite position? Every second, ten checks decide, and when the
+       answer is no the ship keeps navigating on dead reckoning, radar, depth soundings and
+       other aids. Set in the Gulf of Finland, Baltic Sea.</p>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <ul class="cards">
+      <li>
+        <h2><a href="bridge/">Bridge view</a></h2>
+        <p>For navigators and pitches: ship status, instructions, the ten checks and a live map.
+           Pick a scenario (jamming, spoofing, receiver failure) and a correction method, then press Play.</p>
+      </li>
+      <li>
+        <h2><a href="learn/">Teaching website</a></h2>
+        <p>How it works: signal inspector, check cards, playbooks with sources, maps, a briefing
+           and the derivations behind every number.</p>
+      </li>
+    </ul>
+
+    <section aria-labelledby="flow-title">
+      <h2 id="flow-title">How a problem is diagnosed</h2>
+      <figure>
+        <img src="diagnosis_flowchart.svg" width="1180" height="1419"
+             alt="Flow chart: the ten checks run in order every second and the first one that fails decides the verdict. The full list is given below the chart.">
+        <figcaption>
+          <p>Every second the checks run in this order; the first that answers “yes” decides:</p>
+          <ol>
+            <li>Noise floor: background radio noise far above normal → JAMMING</li>
+            <li>Satellite count: too few satellites or no position → LOST</li>
+            <li>Signal strength drop: all satellites much quieter → JAMMING</li>
+            <li>Signal spread: satellites all equally strong → SPOOFING</li>
+            <li>Signal strength rise: satellites louder than possible → SPOOFING</li>
+            <li>Clock consistency: receiver clock jumped → SPOOFING</li>
+            <li>Position vs dead reckoning: the ship cannot have moved there → SPOOFING</li>
+            <li>Position on water: GNSS position on land → SPOOFING</li>
+            <li>Depth vs chart: sounder disagrees with the chart → SPOOFING</li>
+            <li>Position agreement: noisy but possible → DEGRADED (blend with dead reckoning)</li>
+          </ol>
+          <p>All checks pass → GNSS is trusted.</p>
+        </figcaption>
+      </figure>
+    </section>
+  </main>
+
+  <footer>
+    <p><strong>Demonstration only, not for navigation.</strong> Every voyage, signal and attack
+       here is simulated and pre-computed; the depth chart is synthetic unless stated otherwise.
+       Nothing is sent from your browser.</p>
+  </footer>
+</body>
+</html>

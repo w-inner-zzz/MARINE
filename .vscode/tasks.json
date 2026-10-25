@@ -20,6 +20,17 @@
       "problemMatcher": []
     },
     {
+      "label": "Preview public site",
+      "detail": "Build dist/ (the public website) and serve it at http://localhost:8788 with the host's headers",
+      "type": "shell",
+      "command": "python scripts/build_site.py --serve",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "^__never_matches__$" },
+        "background": { "activesBegin": true, "beginsPattern": "serving dist", "endsPattern": "serving dist" }
+      }
+    },
+    {
       "label": "Run tests",
       "type": "shell",
       "command": "python -m pytest",
