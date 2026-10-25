@@ -17,7 +17,7 @@
     $("further-reading").innerHTML = C().further_reading
       .map(([title, url]) => `<li><a href="${url}" target="_blank" rel="noopener">${MARINE.escape(title)}</a></li>`)
       .join("");
-    $("tab-simple").innerHTML = MARINE.renderBlocks(C().simple);
+    $("tab-simple").innerHTML = `<h2 class="sr-only">Simple explanation</h2>${MARINE.renderBlocks(C().simple)}`;
     const ex = C().derivation_example;
     $("derivations-intro").innerHTML = "Each derivation goes step by step, defines every symbol and " +
       `ends with a worked example. Worked examples that use live numbers take them from the ` +
@@ -37,14 +37,25 @@
   }
 
   function setupTabs() {
-    document.querySelectorAll(".tabs button").forEach((button) => {
-      button.addEventListener("click", () => {
-        document.querySelectorAll(".tabs button").forEach((b) =>
-          b.setAttribute("aria-selected", String(b === button)));
-        document.querySelectorAll(".tab").forEach((tab) => {
-          tab.hidden = tab.id !== `tab-${button.dataset.tab}`;
-        });
-        if (button.dataset.tab === "monitor") render();  // charts need a visible size
+    const buttons = [...document.querySelectorAll(".tabs button")];
+    const select = (button) => {
+      buttons.forEach((b) => {
+        b.setAttribute("aria-selected", String(b === button));
+        b.tabIndex = b === button ? 0 : -1;
+      });
+      document.querySelectorAll(".tab").forEach((tab) => {
+        tab.hidden = tab.id !== `tab-${button.dataset.tab}`;
+      });
+      if (button.dataset.tab === "monitor") render();  // charts need a visible size
+    };
+    buttons.forEach((button, i) => {
+      button.addEventListener("click", () => select(button));
+      // Arrow keys move between tabs (the usual keyboard pattern for tab lists).
+      button.addEventListener("keydown", (e) => {
+        if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+        const next = buttons[(i + (e.key === "ArrowRight" ? 1 : buttons.length - 1)) % buttons.length];
+        next.focus();
+        select(next);
       });
     });
   }
@@ -76,11 +87,13 @@
     clearInterval(view.timer);
     view.timer = null;
     $("play").textContent = "▶ Play";
+    $("play").setAttribute("aria-pressed", "false");
   }
 
   function togglePlay() {
     if (view.timer) { stopPlaying(); return; }
     $("play").textContent = "⏸ Pause";
+    $("play").setAttribute("aria-pressed", "true");
     view.timer = setInterval(() => {
       const last = view.S.state.length - 1;
       setTime(view.t + Number($("step").value));
@@ -162,6 +175,32 @@
     maps.closeupMap("closeup", S, t);
     maps.overviewMap("overview", S, chart, t);
     ch.errorChart("error-chart", S, t);
+    describeCharts(S, t, N);
+  }
+
+  // Text alternatives for every chart and map, refreshed with the data.
+  function describeCharts(S, t, N) {
+    const sats = MARINE.charts.sats(S, t);
+    const tracked = sats.filter((s) => s.tracked);
+    const mean = tracked.length ? tracked.reduce((a, s) => a + s.cn0, 0) / tracked.length : null;
+    const dB = (v) => (v === null ? "none" : `${v.toFixed(0)} dB-Hz`);
+    const state = C().states[S.state[t]];
+    const pos = MARINE.fmtLatLon(S.lat[t], S.lon[t]);
+    const label = {
+      sky: `Sky plot: ${sats.length} satellites received, ${tracked.length} tracked. The table below lists each one.`,
+      cn0: `Signal strength per satellite: average ${dB(mean)} of the tracked satellites; normal is 35 to 50, tracking needs 28.`,
+      "h-cn0": `Signal strength of every satellite over the last 5 minutes; average now ${dB(mean)}.`,
+      "h-noise": `Noise floor over the last 5 minutes: now ${S.agc[t].toFixed(1)} dB, learned normal ${S.b_agc[t].toFixed(1)} dB.`,
+      "h-count": `Satellites tracked over the last 5 minutes: now ${S.nsat[t]}; 5 are needed.`,
+      "h-jump": "GNSS position jump per second over the last 5 minutes, against the ship's speed.",
+      "route-map": `Route map: ship at ${pos}, state ${state}, uncertainty ±${S.unc[t].toFixed(0)} m.` +
+        (S.danger && S.danger.t <= t ? ` Trusting GNSS would have put the ship ${S.danger.what}.` : ""),
+      closeup: `Close-up map around the ship at ${pos}, uncertainty circle ±${S.unc[t].toFixed(0)} m.`,
+      overview: "Overview map of the Baltic Sea showing this voyage in the Gulf of Finland.",
+      "error-chart": `Position error over time: guard ${S.gerr[t].toFixed(0)} m and naive GNSS ` +
+        `${S.nerr[t].toFixed(0)} m at the selected second.`,
+    };
+    for (const [id, text] of Object.entries(label)) $(id).setAttribute("aria-label", text);
   }
 
   async function start() {

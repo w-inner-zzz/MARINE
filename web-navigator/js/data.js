@@ -76,3 +76,9 @@ NAV.fmtLatLon = function (lat, lon) {
   return `${Math.abs(lat).toFixed(4)}° ${lat >= 0 ? "N" : "S"}, ` +
          `${Math.abs(lon).toFixed(4)}° ${lon >= 0 ? "E" : "W"}`;
 };
+
+// Distance in metres between two lat/lon points (local flat approximation).
+NAV.distanceM = function (lat1, lon1, lat2, lon2) {
+  const R = 6371000, rad = Math.PI / 180;
+  return Math.hypot((lon2 - lon1) * rad * R * Math.cos(lat1 * rad), (lat2 - lat1) * rad * R);
+};

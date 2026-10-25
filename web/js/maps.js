@@ -6,7 +6,7 @@
 "use strict";
 
 MARINE.maps = (function () {
-  const PLOT_CONFIG = { responsive: true, displaylogo: false };
+  const PLOT_CONFIG = { responsive: true, displaylogo: false, displayModeBar: false };
   const SEA_SCALE = [[0, "#d6eaf8"], [1, "#1b4f72"]];
   const M_PER_DEG = 111195;
   const pal = () => MARINE.content.palette;

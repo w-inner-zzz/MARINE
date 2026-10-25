@@ -6,6 +6,7 @@ MARINE.sections = (function () {
   const esc = MARINE.escape;
   const C = () => MARINE.content;
   const pal = () => MARINE.content.palette;
+  const ink = (state) => pal().states_ink[state];  // readable text colour for a state
   const stateName = (S, t) => C().states[S.state[t]];
   const STATUS = { 1: ["✅", "passed"], 0: ["❌", "failed"], null: ["➖", "skipped"] };
 
@@ -39,7 +40,7 @@ MARINE.sections = (function () {
       const texts = explain(c);
       const isDeciding = c === deciding;
       const style = isDeciding ? `border:3px solid ${color};background:${color}14;` : "";
-      const badge = isDeciding ? `<span class="badge" style="background:${color}">decided the verdict</span>` : "";
+      const badge = isDeciding ? `<span class="badge" style="background:${ink(stateName(S, t))}">decided the verdict</span>` : "";
       return `<div class="card" style="${style}">
         <div class="head">${i + 1}. ${icon} ${esc(c.name)}
           <span class="meta"> · ${word} · value ${MARINE.fmtNumber(c.value)} / threshold
@@ -78,7 +79,7 @@ MARINE.sections = (function () {
     const state = stateName(S, t);
     const color = pal().states[state];
     el.innerHTML = `<div class="banner" style="border-left-color:${color};background:${color}1f">
-      <div class="state" style="color:${color}">${state}
+      <div class="state" style="color:${ink(state)}">${state}
         <small>&nbsp;t = ${t} s · position ${S.lat[t].toFixed(4)}° N, ${S.lon[t].toFixed(4)}° E
         ± ${S.unc[t].toFixed(0)} m</small></div>
       <div><b>What is happening:</b> ${esc(whatIsHappening(S, t))}</div>
@@ -107,7 +108,7 @@ MARINE.sections = (function () {
       ? `<p>Clean for ${S.clean[t]} of ${S.need[t]} seconds</p><div class="progress">
          <div style="width:${(100 * S.clean[t] / S.need[t]).toFixed(0)}%"></div></div>` : "";
     el.innerHTML = `
-      <p><span style="color:${color};font-weight:700;font-size:1.2rem">${state}</span>
+      <p><span style="color:${ink(state)};font-weight:700;font-size:1.2rem">${state}</span>
         &nbsp; position from <b>${esc(a.position_source)}</b> · autopilot <b>${esc(a.autopilot_mode)}</b>
         · speed <b>${esc(a.recommended_speed_kn)}</b> · look-out <b>${esc(a.lookout_level)}</b></p>
       ${a.alerts.map((x) => `<div class="note warn">${esc(x)}</div>`).join("")}
@@ -209,7 +210,7 @@ MARINE.sections = (function () {
 
   function renderStatus(el, S, t) {
     const state = stateName(S, t);
-    el.innerHTML = `At <b>t = ${t} s</b> the guard says <b style="color:${pal().states[state]}">${state}</b>.
+    el.innerHTML = `At <b>t = ${t} s</b> the guard says <b style="color:${ink(state)}">${state}</b>.
       Below: what the receiver reports, how each check judges it, the decision, and what the boat
       should do.`;
   }

@@ -54,6 +54,14 @@ MARINE.content = {
    "JAMMING": "#e34948",
    "SPOOFING": "#6250d6"
   },
+  "states_ink": {
+   "TRUSTED": "#006b00",
+   "DEGRADED": "#8a5d00",
+   "RECOVERING": "#1f63b5",
+   "LOST": "#b54708",
+   "JAMMING": "#c0282a",
+   "SPOOFING": "#5a46c8"
+  },
   "red_path": "#e34948",
   "green_path": "#008300",
   "truth": "#8a8986",

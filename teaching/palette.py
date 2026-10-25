@@ -10,6 +10,17 @@ STATE_COLORS = {
     State.JAMMING: "#e34948",
     State.SPOOFING: "#6250d6",
 }
+# Darker shade of each state colour for TEXT on white or white text on the colour:
+# all reach WCAG AA contrast (4.5:1) with white. The brighter STATE_COLORS stay
+# for lines, borders and chart marks.
+STATE_INK = {
+    State.TRUSTED: "#006b00",
+    State.DEGRADED: "#8a5d00",
+    State.RECOVERING: "#1f63b5",
+    State.LOST: "#b54708",
+    State.JAMMING: "#c0282a",
+    State.SPOOFING: "#5a46c8",
+}
 RED_PATH = "#e34948"
 GREEN_PATH = "#008300"
 TRUTH = "#8a8986"
@@ -43,6 +54,7 @@ def palette_dict() -> dict:
     """Everything above as plain JSON-friendly values."""
     return {
         "states": {s.value: c for s, c in STATE_COLORS.items()},
+        "states_ink": {s.value: c for s, c in STATE_INK.items()},
         "red_path": RED_PATH, "green_path": GREEN_PATH, "truth": TRUTH,
         "ship_track": SHIP_TRACK, "healthy": HEALTHY, "muted": MUTED, "accent": ACCENT,
         "fix": FIX_COLOR, "land": LAND, "event_shade": EVENT_SHADE,

@@ -4,7 +4,7 @@
 MARINE.charts = (function () {
   const NORMAL_BAND = [35, 50];
   const HISTORY_S = 300;
-  const PLOT_CONFIG = { responsive: true, displaylogo: false };
+  const PLOT_CONFIG = { responsive: true, displaylogo: false, displayModeBar: false };
   const pal = () => MARINE.content.palette;
   const threshold = () => MARINE.content.tracking_threshold_dbhz;
 

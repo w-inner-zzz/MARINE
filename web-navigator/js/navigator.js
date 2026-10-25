@@ -19,13 +19,15 @@
   const SIGNAL_WINDOW_S = 300;
 
   // Plain-language status of the received GPS signal, from the raw verdict.
+  // Badge colours are the darker "ink" shades so white text stays readable.
   const SIGNAL_STATUS = {
-    OK: ["NORMAL", "#008300"],
-    DEGRADED: ["NOISY", "#eda100"],
-    LOST: ["WEAK", "#e34948"],
-    JAMMING: ["WEAK", "#e34948"],
-    SPOOFING: ["TAMPERED", "#6250d6"],
+    OK: ["NORMAL", "#006b00"],
+    DEGRADED: ["NOISY", "#8a5d00"],
+    LOST: ["WEAK", "#c0282a"],
+    JAMMING: ["WEAK", "#c0282a"],
+    SPOOFING: ["TAMPERED", "#5a46c8"],
   };
+  const PLOT_CONFIG = { responsive: true, displaylogo: false, displayModeBar: false };
 
   // Extra instruction while the chosen aid is navigating for us.
   const AID_INSTRUCTION = {
@@ -103,6 +105,11 @@
     const state = stateAt(t);
     const color = pal().states[state];
     document.documentElement.style.setProperty("--state", color);
+    document.documentElement.style.setProperty("--state-ink", pal().states_ink[state]);
+    if (state !== view.announced) {  // speak state changes only, not every second
+      view.announced = state;
+      $("announcer").textContent = `${clock(t)}: ${state}. ${STATE_LINE[state]}`;
+    }
     $("status").classList.toggle("alarm", HARD.includes(state));
     $("state").textContent = state;
     $("state-line").textContent = state === "RECOVERING"
@@ -210,7 +217,7 @@
     $("instructions").innerHTML = shown.map((x, i) => {
       const color = pal().states[x.state];
       return `<li class="${i === 0 ? "now" : ""}" style="border-left-color:${color};--entry:${color}">
-        <span class="when">${clock(x.t)}</span><span class="chip" style="background:${color}">${x.state}</span>
+        <span class="when">${clock(x.t)}</span><span class="chip" style="background:${pal().states_ink[x.state]}">${x.state}</span>
         <ul>${instructionLines(x.state, x.last).map((l) => `<li>${NAV.escape(l)}</li>`).join("")}</ul></li>`;
     }).join("");
   }
@@ -230,9 +237,11 @@
     $("checks").innerHTML = S.checks[t].map(([passed, value, threshold], i) => {
       const name = C().checks[i].name;
       const cls = passed === null ? "skip" : passed ? "ok" : "bad";
-      return `<div class="check ${cls}" title="${NAV.escape(C().checks[i].if_fails)}">
-        <span>${CHECK_TILES[name][0]}</span>
-        <span class="reading">${NAV.escape(reading(name, value, threshold, passed))}</span></div>`;
+      const [icon, word] = { ok: ["✓", "passed"], bad: ["✗", "failed"], skip: ["–", "no data"] }[cls];
+      return `<li class="check ${cls}" title="${NAV.escape(C().checks[i].if_fails)}">
+        <span><span class="icon" aria-hidden="true">${icon}</span>${CHECK_TILES[name][0]}
+        <span class="sr-only">: ${word}.</span></span>
+        <span class="reading">${NAV.escape(reading(name, value, threshold, passed))}</span></li>`;
     }).join("");
   }
 
@@ -347,7 +356,8 @@
       layout.shapes = [{ type: "rect", x0: lonRange[0], x1: lonRange[1], y0: C().coast_lat_short,
                          y1: latRange[1] + 1, fillcolor: pal().land, line: { width: 0 }, layer: "below" }];
     }
-    Plotly.react("map", traces, layout, { responsive: true, displaylogo: false });
+    Plotly.react("map", traces, layout, PLOT_CONFIG);
+    $("map").setAttribute("aria-label", describeMap(S, t));
   }
 
   // Shore stations (with ranging lines to the ones heard) or nearby ships at
@@ -427,8 +437,8 @@
       $("acc-method").innerHTML += `<small style="display:block;font-size:0.9rem;font-weight:500">` +
         `now: ${NAV.escape(methodsInUse(S, t).map((m) => METHOD_NAMES[m]).join(" + "))}</small>`;
     }
-    const [label, colour] = err <= claimed ? ["WITHIN ESTIMATE", "#008300"]
-      : err <= 2 * claimed ? ["SLIGHTLY OFF", "#eda100"] : ["WORSE THAN IT THINKS", "#e34948"];
+    const [label, colour] = err <= claimed ? ["WITHIN ESTIMATE", "#006b00"]
+      : err <= 2 * claimed ? ["SLIGHTLY OFF", "#8a5d00"] : ["WORSE THAN IT THINKS", "#c0282a"];
     $("accuracy-badge").textContent = label;
     $("accuracy-badge").style.background = colour;
 
@@ -451,7 +461,9 @@
       xaxis: { title: { text: "time (s)" } },
       yaxis: { type: "log", title: { text: "metres" }, tickvals: [0.1, 1, 10, 100, 1000, 10000],
                ticktext: ["0.1", "1", "10", "100", "1 km", "10 km"] },
-    }, { responsive: true, displaylogo: false });
+    }, PLOT_CONFIG);
+    $("accuracy-chart").setAttribute("aria-label", `Accuracy over the whole run. Now: actual error ` +
+      `${fmt(err)} against the ship's own estimate of ±${fmt(claimed)}: ${label.toLowerCase()}.`);
 
     const rows = C().accuracy[view.mode][view.key];
     $("accuracy-table").innerHTML = `<table><caption>All ${C().solutions.length} methods, this scenario
@@ -484,7 +496,7 @@
 
   function signalClass(S, i) {
     const verdict = C().verdicts[S.verdict[i]];
-    if (S.sig[i].every((v) => v === null)) return ["NO SIGNAL", "#e34948"];
+    if (S.sig[i].every((v) => v === null)) return ["NO SIGNAL", "#c0282a"];
     return SIGNAL_STATUS[verdict];
   }
 
@@ -523,11 +535,15 @@
       paper_bgcolor: "#ffffff", plot_bgcolor: "#ffffff", shapes,
       xaxis: { range: [-SIGNAL_WINDOW_S, 0], title: { text: "seconds ago" } },
       yaxis: { range: [0, 60], title: { text: "signal strength (dB-Hz)" } },
-    }, { responsive: true, displaylogo: false });
+    }, PLOT_CONFIG);
 
     const [label, colour] = signalClass(S, t);
     $("signal-status").textContent = label;
     $("signal-status").style.background = colour;
+    const cn0 = S.cn0[t];
+    $("signal").setAttribute("aria-label", `GPS signal graph, last 5 minutes. Signal ${label}: ` +
+      `${S.nsat[t]} satellites tracked, average strength ` +
+      `${cn0 === null ? "none" : `${cn0.toFixed(0)} dB-Hz`} (normal 35 to 50).`);
   }
 
   function renderSignalLegend() {
@@ -537,6 +553,20 @@
       `<i style="background:#1d2733"></i>average <i style="background:#2a78d6;opacity:0.5"></i>each satellite` +
       `<br>${swatch("#008300", "normal range")}${swatch("#eda100", "noisy")}` +
       `${swatch("#e34948", "weak / lost")}${swatch("#6250d6", "tampered")}`;
+  }
+
+  // Text alternative for the map, refreshed every render.
+  function describeMap(S, t) {
+    const fmt = (m) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m.toFixed(0)} m`);
+    let text = `Map. Ship at ${NAV.fmtLatLon(S.lat[t], S.lon[t])}, heading ` +
+      `${((S.heading[t] % 360) + 360) % 360 | 0} degrees, position uncertainty ±${S.unc[t].toFixed(0)} m. ` +
+      `Navigating with ${methodsInUse(S, t).map((m) => METHOD_NAMES[m]).join(" and ")}.`;
+    if (stateAt(t) !== "TRUSTED" && S.glat[t] !== null) {
+      text += ` GNSS reports a position ${fmt(NAV.distanceM(S.lat[t], S.lon[t], S.glat[t], S.glon[t]))}` +
+        " away, which is not trusted.";
+    }
+    if (view.showTruth) text += ` True position (simulation) is ${fmt(S.gerr[t])} away.`;
+    return text;
   }
 
   function renderMapLegend() {
@@ -575,6 +605,7 @@
     if (!S) return;
     $("clock").textContent = clock(t);
     $("time").value = t;
+    $("time").setAttribute("aria-valuetext", clock(t));
     renderStatus(S, t);
     renderSolutionLine(S, t);
     renderInstructions(t);
@@ -599,11 +630,13 @@
     clearInterval(view.timer);
     view.timer = null;
     $("play").textContent = "▷ Play";
+    $("play").setAttribute("aria-pressed", "false");
   }
 
   function togglePlay() {
     if (view.timer) { stop(); return; }
     $("play").textContent = "❚❚ Pause";
+    $("play").setAttribute("aria-pressed", "true");
     view.timer = setInterval(() => {
       const perTick = Math.max(1, Number($("speed").value) * TICK_MS / 1000);
       setTime(view.t + perTick);

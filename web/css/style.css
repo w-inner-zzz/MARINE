@@ -5,7 +5,7 @@
   --ink: #1d1d1b;
   --muted: #5f5e5a;
   --border: rgba(128, 128, 128, 0.35);
-  --accent: #2a78d6;
+  --accent: #1f63b5;
   --info-bg: #e8f1fc;
   --warn-bg: #fff6d6;
   --error-bg: #fde8e8;
@@ -89,7 +89,7 @@ td.num { text-align: right; }
 
 .banner { border-left: 14px solid; border-radius: 6px; padding: 0.6rem 1rem; }
 .banner .state { font-size: 1.7rem; font-weight: 700; }
-.banner .state small { font-size: 1rem; font-weight: 400; opacity: 0.85; }
+.banner .state small { font-size: 1rem; font-weight: 400; color: var(--ink); }
 
 .playbook { display: grid; grid-template-columns: 3fr 2fr; gap: 1.2rem; }
 .rules { border: 1px solid var(--border); border-radius: 8px; padding: 0.4rem 1rem; }
@@ -109,3 +109,13 @@ td.num { text-align: right; }
   .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   main { padding: 1rem; }
 }
+
+/* --- Accessibility -------------------------------------------------------- */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+           clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.skip-link { position: absolute; left: 1rem; top: -3rem; z-index: 10; background: #ffffff;
+             padding: 0.5rem 0.9rem; border-radius: 6px; font-weight: 700; border: 2px solid #0b57d0; }
+.skip-link:focus { top: 1rem; }
+:focus-visible { outline: 3px solid #0b57d0; outline-offset: 2px; box-shadow: 0 0 0 5px #ffffff; }
+main:focus { outline: none; }
+
