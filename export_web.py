@@ -46,7 +46,7 @@ DERIVATION_EXAMPLE = ("normal", 600)
 def packed(obj) -> str:
     """JSON -> gzip -> base64 text (decoded in the browser by util.js)."""
     raw = json.dumps(obj, separators=(",", ":")).encode()
-    return base64.b64encode(gzip.compress(raw, 9)).decode()
+    return base64.b64encode(gzip.compress(raw, 9, mtime=0)).decode()  # mtime=0: same data, same file
 
 
 def write_js(path: pathlib.Path, assignment: str) -> None:
