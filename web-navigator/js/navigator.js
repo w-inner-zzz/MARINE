@@ -34,6 +34,18 @@
     seabed: "Position from seabed matching (sounder + chart)",
   };
   const SEABED_LOOKBACK_S = 1800;
+  const AIDS = ["pseudolites", "peers", "seabed"];
+  const IN_USE_HOLD_S = 120;  // a method counts as in use this long after a fix was used
+
+  // Display names for the methods the ship can navigate with.
+  const METHOD_NAMES = {
+    gnss: "GNSS",
+    blend: "GNSS blended with dead reckoning",
+    dead_reckoning: "Dead reckoning + radar/depth",
+    pseudolites: "Pseudolites",
+    peers: "Nearby ships",
+    seabed: "Seabed signature",
+  };
 
   // One short line per state, shown under the big status word.
   const STATE_LINE = {
@@ -59,7 +71,7 @@
     "Position agreement": ["Agreement", "m", "max", 1],
   };
 
-  const view = { mode: "voyage", key: "normal", solution: "none", t: 0, S: null, timer: null,
+  const view = { mode: "voyage", key: "normal", solution: "auto", t: 0, S: null, timer: null,
                  transitions: [], mapView: "ship", showTruth: false, pending: false };
 
   const stateAt = (t) => C().states[view.S.state[t]];
@@ -112,16 +124,43 @@
       `<div class="vital${wide ? " wide" : ""}"><span>${k}</span><b>${NAV.escape(v)}</b></div>`).join("");
   }
 
+  // Methods navigating the ship at second t, main one first (e.g. ["pseudolites", "seabed"]).
+  function methodsInUse(S, t) {
+    if (S.meta.solution === "auto") return S.sel_names[S.sel[t]].split("+");
+    const state = stateAt(t);
+    if (state === "TRUSTED") return ["gnss"];
+    if (state === "DEGRADED") return ["blend"];
+    for (let i = t; i >= Math.max(0, t - IN_USE_HOLD_S); i--) {
+      if (S.aid_used[i] > 0) return [S.meta.solution];
+    }
+    return ["dead_reckoning"];
+  }
+
+  function renderSolutionLine(S, t) {
+    const names = methodsInUse(S, t).map((m) => METHOD_NAMES[m]).join(" + ");
+    const why = S.meta.solution === "auto" ? S.why_texts[S.why[t]] : "";
+    $("solution-line").innerHTML = `<span>Solution in use</span> <b>${NAV.escape(names)}</b>` +
+      (why ? `<small>${NAV.escape(why)}</small>` : "");
+  }
+
   // e.g. "6 stations · in use", "2/4 ships used", "Off".
   function aidStatus(S, t) {
     const solution = S.meta.solution;
     if (solution === "none") return "Off";
-    const inUse = S.aid_used[t] > 0;
+    if (solution !== "auto") return methodStatus(S, t, solution, S.aid_used[t] > 0);
+    const main = methodsInUse(S, t)[0];
+    if (main === "gnss" || main === "blend") return "standby";
+    if (main === "dead_reckoning") return "none available";
+    return methodStatus(S, t, main, true);
+  }
+
+  function methodStatus(S, t, solution, inUse) {
     const standby = stateAt(t) === "TRUSTED" || stateAt(t) === "DEGRADED";
     if (solution === "pseudolites") {
       const heard = bits(S.stations[t]);
-      if (!S.aid_offered[t]) return `${heard} stations · no fix`;
-      return `${heard} stations · ${inUse ? "in use" : standby ? "standby" : "rejected"}`;
+      if (standby) return `${heard} stations · standby`;
+      if (heard < 3) return `${heard} stations · no fix`;
+      return `${heard} stations · ${inUse ? "in use" : "rejected"}`;
     }
     if (solution === "seabed") {
       if (standby) return "standby";
@@ -153,21 +192,26 @@
     return out;
   }
 
-  function instructionLines(state) {
+  function instructionLines(state, t) {
     const a = C().actions[state];
     const lines = [a.autopilot_mode, `Speed: ${a.recommended_speed_kn}`, a.crew_instructions[0]];
-    const aid = AID_INSTRUCTION[view.solution];
-    if (aid && state !== "TRUSTED" && state !== "DEGRADED") lines.push(aid);
+    if (state === "TRUSTED" || state === "DEGRADED") return lines;
+    const solution = view.solution === "auto" ? methodsInUse(view.S, t)[0] : view.solution;
+    if (AID_INSTRUCTION[solution]) lines.push(AID_INSTRUCTION[solution]);
     return lines;
   }
 
   function renderInstructions(t) {
-    const shown = view.transitions.filter((x) => x.t <= t).slice(-6).reverse();
+    // Each entry lists the method used during its state: the latest second of
+    // that period (the selector needs a moment to react to a new alarm).
+    const all = view.transitions.filter((x) => x.t <= t);
+    const ends = all.map((x, i) => (i + 1 < all.length ? all[i + 1].t - 1 : t));
+    const shown = all.map((x, i) => ({ ...x, last: ends[i] })).slice(-6).reverse();
     $("instructions").innerHTML = shown.map((x, i) => {
       const color = pal().states[x.state];
       return `<li class="${i === 0 ? "now" : ""}" style="border-left-color:${color};--entry:${color}">
         <span class="when">${clock(x.t)}</span><span class="chip" style="background:${color}">${x.state}</span>
-        <ul>${instructionLines(x.state).map((l) => `<li>${NAV.escape(l)}</li>`).join("")}</ul></li>`;
+        <ul>${instructionLines(x.state, x.last).map((l) => `<li>${NAV.escape(l)}</li>`).join("")}</ul></li>`;
     }).join("");
   }
 
@@ -309,11 +353,15 @@
   // Shore stations (with ranging lines to the ones heard) or nearby ships at
   // their broadcast positions (green = used, red = rejected, grey = out of radar).
   function aidTraces(S, t) {
-    const solution = S.meta.solution;
+    const methods = S.meta.solution === "auto" ? methodsInUse(S, t) : [S.meta.solution];
+    return methods.filter((m) => AIDS.includes(m)).flatMap((m) => methodTraces(S, t, m));
+  }
+
+  function methodTraces(S, t, solution) {
     const lat = S.lat[t], lon = S.lon[t];
     if (solution === "pseudolites") {
       const heard = C().stations.map((_, i) => !!(S.stations[t] & (1 << i)));
-      const inUse = S.aid_used[t] > 0;
+      const inUse = S.meta.solution === "auto" || S.aid_used[t] > 0;
       const lines = { x: [], y: [] };
       C().stations.forEach((st, i) => {
         if (heard[i]) { lines.x.push(lon, st.lon, null); lines.y.push(lat, st.lat, null); }
@@ -375,6 +423,10 @@
     $("acc-error").textContent = fmt(err);
     $("acc-claimed").textContent = `±${fmt(claimed)}`;
     $("acc-method").textContent = C().solutions.find((x) => x.key === S.meta.solution).title;
+    if (S.meta.solution === "auto") {
+      $("acc-method").innerHTML += `<small style="display:block;font-size:0.9rem;font-weight:500">` +
+        `now: ${NAV.escape(methodsInUse(S, t).map((m) => METHOD_NAMES[m]).join(" + "))}</small>`;
+    }
     const [label, colour] = err <= claimed ? ["WITHIN ESTIMATE", "#008300"]
       : err <= 2 * claimed ? ["SLIGHTLY OFF", "#eda100"] : ["WORSE THAN IT THINKS", "#e34948"];
     $("accuracy-badge").textContent = label;
@@ -402,7 +454,7 @@
     }, { responsive: true, displaylogo: false });
 
     const rows = C().accuracy[view.mode][view.key];
-    $("accuracy-table").innerHTML = `<table><caption>All 4 methods, this scenario
+    $("accuracy-table").innerHTML = `<table><caption>All ${C().solutions.length} methods, this scenario
       (${m.event_start === null ? "whole run" : "during the event"})</caption>
       <tr><th>Method</th><th>Average</th><th>Worst</th><th>Within estimate</th></tr>
       ${C().solutions.map((sol) => {
@@ -492,10 +544,13 @@
       `<i style="background:${dotted ? "none" : color};border-top:${dotted ? `3px dotted ${color}` : "none"}"></i>${label}`;
     const dot = (color, label, shape) =>
       `<span style="color:${color};margin-left:0.8rem">${shape}</span> ${label}`;
-    const aid = view.solution === "pseudolites" ? dot("#1b4f72", "shore station", "▲")
-      : view.solution === "peers" ? dot("#008300", "ship used", "●") + dot("#e34948", "ship rejected", "●")
-      : view.solution === "seabed" ? dot("#1baf7a", "seabed fix used", "◆") + dot("#e34948", "rejected", "◆")
-      : "";
+    const legends = {
+      pseudolites: dot("#1b4f72", "shore station", "▲"),
+      peers: dot("#008300", "ship used", "●") + dot("#e34948", "ship rejected", "●"),
+      seabed: dot("#1baf7a", "seabed fix used", "◆") + dot("#e34948", "rejected", "◆"),
+    };
+    const aid = view.solution === "auto" ? AIDS.map((m) => legends[m]).join("")
+      : legends[view.solution] || "";
     $("map-legend").innerHTML =
       item(pal().ship_track, "GNSS track") + item(pal().green_path, "backup track") +
       item(pal().red_path, "GNSS reported (rejected)", true) + aid +
@@ -521,6 +576,7 @@
     $("clock").textContent = clock(t);
     $("time").value = t;
     renderStatus(S, t);
+    renderSolutionLine(S, t);
     renderInstructions(t);
     renderChecks(S, t);
     renderMap(S, t);
